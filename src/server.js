@@ -303,6 +303,6 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log("Sheet Metal Workflow listening on port " + PORT);
 });
