@@ -78,6 +78,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       worksheet.getCell("F9").value = projectNumber;
       worksheet.getCell("I9").value = fixtureQty;
 
+      worksheet.getCell("C9").value = fixtureTag;
       worksheet.getCell("C10").value = fixtureDescription;
       worksheet.getCell("C12").value = finish;
 
