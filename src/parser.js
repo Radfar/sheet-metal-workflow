@@ -6,7 +6,7 @@ export function parseDxfFilename(rawLine) {
   const materialMatch = upper.match(/\bC(11|16)\b/);
   const dimensionMatch = originalFilename.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i);
   const fixtureMatch = upper.match(/\b(T[0-9O]{2}[A-Z])(?=[\s_-]|$)/);
-  const fixtureTag = fixtureMatch?.[1] ?? "";
+  const fixtureTag = fixtureMatch?.[1] ?? "COMMON";
 
   let componentLabel = upper.replace(/^ARI\s+/, "");
   componentLabel = componentLabel.replace(/\bC(?:11|16)\b/, "").replace(/\b\d{4}\b/, "");
@@ -19,7 +19,7 @@ export function parseDxfFilename(rawLine) {
   if (!materialMatch) warnings.push("Material code not detected");
   if (!dimensionMatch) warnings.push("Flat-pattern dimensions not detected");
   if (/\bTO[0-9]{1,2}[A-Z]/i.test(originalFilename)) warnings.push("Possible letter O / digit 0 ambiguity in fixture tag; verify manually");
-  if (!fixtureTag && !/\b(ENDCAP|GUS|SPLICE)\b/i.test(originalFilename)) warnings.push("Fixture tag not detected; assign manually if required");
+  if (fixtureTag === "COMMON") warnings.push("Common component; no unit/fixture tag detected");
 
   return {
     originalFilename, projectNumber: projectMatch?.[1] ?? "", materialCode: materialMatch ? "C" + materialMatch[1] : "",
