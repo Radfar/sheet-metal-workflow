@@ -8,6 +8,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 const BOM_ROWS_PER_SHEET = 25;
+const thinBorder = {
+  top: { style: "thin" },
+  left: { style: "thin" },
+  bottom: { style: "thin" },
+  right: { style: "thin" }
+};
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "../public")));
@@ -35,7 +41,9 @@ app.post("/api/parse-dxf-list", (req, res) => {
 app.post("/api/export-bom-xlsx", async (req, res) => {
   try {
     const {
+      customer = "",
       projectName = "",
+      poNumber = "",
       projectNumber = "",
       fixtureTag = "",
       fixtureQuantity = "",
@@ -53,73 +61,129 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
     workbook.created = new Date();
 
     const fixtureQty = Number(fixtureQuantity) || 0;
+    const exportDate = new Date();
+    const customerProject = [customer.trim(), projectName.trim()]
+      .filter(Boolean)
+      .join(" - ");
 
-    for (let pageStart = 0, page = 1; pageStart < components.length; pageStart += BOM_ROWS_PER_SHEET, page++) {
-      const worksheet = workbook.addWorksheet(page === 1 ? "BOM" : `BOM ${page}`);
+    for (
+      let pageStart = 0, page = 1;
+      pageStart < components.length;
+      pageStart += BOM_ROWS_PER_SHEET, page++
+    ) {
+      const worksheet = workbook.addWorksheet(page === 1 ? "BOM" : "BOM " + page);
 
       worksheet.columns = [
-        { key: "number", width: 7 },
-        { key: "description", width: 62 },
-        { key: "c", width: 14 },
-        { key: "d", width: 14 },
-        { key: "e", width: 14 },
-        { key: "f", width: 14 },
-        { key: "g", width: 14 },
-        { key: "h", width: 14 },
-        { key: "i", width: 14 },
+        { key: "item", width: 7 },
+        { key: "description", width: 14 },
+        { key: "c", width: 12 },
+        { key: "d", width: 12 },
+        { key: "e", width: 12 },
+        { key: "f", width: 12 },
+        { key: "g", width: 12 },
+        { key: "h", width: 12 },
+        { key: "i", width: 12 },
         { key: "quantity", width: 12 },
         { key: "total", width: 14 }
       ];
 
-      worksheet.getCell("C8").value = projectName;
-      worksheet.getCell("I8").value = new Date();
+      // Header labels and values: fixed labels stay in their specified cells.
+      worksheet.getCell("B8").value = "CUSTOMER:";
+      worksheet.getCell("C8").value = customerProject;
+      worksheet.getCell("E8").value = "PO #:";
+      worksheet.getCell("F8").value = poNumber;
+      worksheet.getCell("H8").value = "DATE:";
+      worksheet.getCell("I8").value = exportDate;
       worksheet.getCell("I8").numFmt = "mm/dd/yyyy";
 
-      worksheet.getCell("F9").value = projectNumber;
-      worksheet.getCell("I9").value = fixtureQty;
-
+      worksheet.getCell("B9").value = "UNIT:";
       worksheet.getCell("C9").value = fixtureTag;
+      worksheet.getCell("E9").value = "STORE #:";
+      worksheet.getCell("F9").value = projectNumber;
+      worksheet.getCell("H9").value = "QUANTITY:";
+      worksheet.getCell("I9").value = fixtureQty || "";
+
+      worksheet.getCell("B10").value = "FIXTURE:";
+      worksheet.mergeCells("C10:K10");
       worksheet.getCell("C10").value = fixtureDescription;
+
+      worksheet.getCell("B11").value = "FINISH:";
+      worksheet.mergeCells("C11:K11");
       worksheet.getCell("C11").value = finish;
 
+      // BOM rows 12-36: 25 lines per worksheet.
       for (let i = 0; i < BOM_ROWS_PER_SHEET; i++) {
         const component = components[pageStart + i];
         const rowNumber = 12 + i;
-        const quantity = Number(component?.quantityPerAssembly) || 0;
+        const quantity = Number(component?.quantityPerAssembly);
+        const validQuantity = Number.isFinite(quantity) && quantity >= 0;
         const description =
           component?.description?.trim() ||
           component?.componentLabel?.trim() ||
           component?.originalFilename?.trim() ||
           "";
 
-        worksheet.getCell(`A${rowNumber}`).value = component ? pageStart + i + 1 : "";
-        worksheet.getCell(`B${rowNumber}`).value = description;
-        worksheet.getCell(`J${rowNumber}`).value = component ? quantity : "";
-        worksheet.getCell(`K${rowNumber}`).value = component && fixtureQty && quantity ? fixtureQty * quantity : "";
+        worksheet.mergeCells("B" + rowNumber + ":I" + rowNumber);
 
-        worksheet.getCell(`A${rowNumber}`).alignment = { horizontal: "center", vertical: "top" };
-        worksheet.getCell(`J${rowNumber}`).alignment = { horizontal: "center", vertical: "top" };
-        worksheet.getCell(`K${rowNumber}`).alignment = { horizontal: "center", vertical: "top" };
-        worksheet.getCell(`B${rowNumber}`).alignment = { vertical: "top", wrapText: true };
+        worksheet.getCell("A" + rowNumber).value = component ? pageStart + i + 1 : "";
+        worksheet.getCell("B" + rowNumber).value = component ? description : "";
+        worksheet.getCell("J" + rowNumber).value =
+          component && validQuantity && component.quantityPerAssembly !== "" ? quantity : "";
+
+        if (component && fixtureQty > 0 && validQuantity && component.quantityPerAssembly !== "") {
+          worksheet.getCell("K" + rowNumber).value = {
+            formula: 'IF(OR(J' + rowNumber + '="", $I$9=""), "", J' + rowNumber + '*$I$9)',
+            result: quantity * fixtureQty
+          };
+        } else {
+          worksheet.getCell("K" + rowNumber).value = "";
+        }
+
+        worksheet.getCell("A" + rowNumber).alignment = {
+          horizontal: "center",
+          vertical: "middle"
+        };
+        worksheet.getCell("B" + rowNumber).alignment = {
+          vertical: "top",
+          wrapText: true
+        };
+        worksheet.getCell("J" + rowNumber).alignment = {
+          horizontal: "center",
+          vertical: "middle"
+        };
+        worksheet.getCell("K" + rowNumber).alignment = {
+          horizontal: "center",
+          vertical: "middle"
+        };
 
         for (const col of ["A", "B", "J", "K"]) {
-          worksheet.getCell(`${col}${rowNumber}`).border = {
-            top: { style: "thin" },
-            left: { style: "thin" },
-            bottom: { style: "thin" },
-            right: { style: "thin" }
-          };
+          worksheet.getCell(col + rowNumber).border = thinBorder;
         }
+        worksheet.getRow(rowNumber).height = 24;
       }
 
-      worksheet.getCell("C8").font = { bold: true };
-      worksheet.getCell("F9").font = { bold: true };
-      worksheet.getCell("I9").font = { bold: true };
-      worksheet.getCell("C10").font = { bold: true };
-      worksheet.getCell("C11").font = { bold: true };
+      // Apply consistent header formatting after merges are defined.
+      for (const cellAddress of [
+        "B8", "E8", "H8", "B9", "E9", "H9", "B10", "B11"
+      ]) {
+        worksheet.getCell(cellAddress).font = { bold: true };
+        worksheet.getCell(cellAddress).alignment = {
+          vertical: "middle",
+          horizontal: "left"
+        };
+      }
 
-      worksheet.getCell("I8").alignment = { horizontal: "center" };
-      worksheet.getCell("I9").alignment = { horizontal: "center" };
+      for (const cellAddress of ["C8", "F8", "I8", "C9", "F9", "I9", "C10", "C11"]) {
+        worksheet.getCell(cellAddress).alignment = {
+          vertical: "middle",
+          horizontal: "left",
+          wrapText: true
+        };
+      }
+
+      for (const rowNumber of [8, 9, 10, 11]) {
+        worksheet.getRow(rowNumber).height = rowNumber >= 10 ? 30 : 22;
+      }
 
       worksheet.pageSetup = {
         orientation: "landscape",
@@ -135,7 +199,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
 
     const safeFixture = String(fixtureTag || "BOM").replace(/[^a-z0-9_-]+/gi, "_");
     const safeProject = String(projectNumber || projectName || "project").replace(/[^a-z0-9_-]+/gi, "_");
-    const filename = `BOM - ${safeProject} - ${safeFixture}.xlsx`;
+    const filename = "BOM - " + safeProject + " - " + safeFixture + ".xlsx";
 
     res.setHeader(
       "Content-Type",
@@ -143,7 +207,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
     );
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="${filename}"`
+      'attachment; filename="' + filename + '"'
     );
 
     await workbook.xlsx.write(res);
@@ -157,5 +221,5 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Sheet Metal Workflow running at http://localhost:${PORT}`);
+  console.log("Sheet Metal Workflow running at http://localhost:" + PORT);
 });
