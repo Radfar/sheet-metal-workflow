@@ -94,7 +94,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
         worksheet.getCell(`A${rowNumber}`).value = component ? pageStart + i + 1 : "";
         worksheet.getCell(`B${rowNumber}`).value = description;
         worksheet.getCell(`J${rowNumber}`).value = component ? quantity : "";
-        worksheet.getCell(`K${rowNumber}`).value = component ? fixtureQty * quantity : "";
+        worksheet.getCell(`K${rowNumber}`).value = component && fixtureQty && quantity ? fixtureQty * quantity : "";
 
         worksheet.getCell(`A${rowNumber}`).alignment = { horizontal: "center", vertical: "top" };
         worksheet.getCell(`J${rowNumber}`).alignment = { horizontal: "center", vertical: "top" };
