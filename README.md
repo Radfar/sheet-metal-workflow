@@ -41,6 +41,6 @@ To use another port, set the `PORT` environment variable before starting the app
 - Shared components must not be merged across fixtures until material, thickness, geometry, revision and approval status are verified.
 
 ## Configurable BOM templates
-The report layout and output filename will be configurable independently of BOM data. The initial Excel layout will be based on the supplied reference workbook after its worksheet structure and formatting have been inspected. No customer-specific layout is hard-coded into the calculation engine.
+The current XLSX export follows the agreed worksheet coordinates: customer/project name in C8, date in I8, store number in F9, fixture quantity in I9, fixture type in C10, finish in C12, and BOM lines beginning at row 12. Each worksheet contains 25 BOM rows (rows 12–36). If more than 25 BOM lines exist, additional worksheets repeat the same structure. The output filename and layout remain separate from the BOM calculation logic.
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/DATA-MODEL.md](docs/DATA-MODEL.md).
