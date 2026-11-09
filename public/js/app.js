@@ -147,3 +147,12 @@ $("exportBtn").addEventListener("click", async () => {
     button.disabled = !components.length;
   }
 });
+
+
+const logoutButton = $("logoutBtn");
+if (logoutButton) {
+  logoutButton.addEventListener("click", async () => {
+    await fetch("/api/logout", { method: "POST" });
+    window.location.replace("/login");
+  });
+}
