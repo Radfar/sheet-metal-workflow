@@ -21,7 +21,10 @@ This is a local prototype. It does not yet read DXF geometry, connect to Postgre
 npm install
 npm run dev
 ```
-Open http://localhost:3000.
+
+The application runs at http://localhost:3001 by default. This keeps it separate from the SCADA API running on port 3000.
+
+To use another port, set the `PORT` environment variable before starting the application.
 
 ## Current workflow
 1. Enter project and fixture details.
