@@ -1,5 +1,6 @@
 import express from "express";
 import path from "node:path";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import ExcelJS from "exceljs";
 import { parseDxfList } from "./parser.js";
@@ -7,16 +8,113 @@ import { parseDxfList } from "./parser.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const AUTH_USERNAME = process.env.APP_USERNAME;
+const AUTH_PASSWORD = process.env.APP_PASSWORD;
+const AUTH_SECRET = process.env.AUTH_SECRET;
+const AUTH_ENABLED = Boolean(AUTH_USERNAME && AUTH_PASSWORD && AUTH_SECRET);
+const SESSION_COOKIE = "smw_session";
+const SESSION_DURATION_SECONDS = 12 * 60 * 60;
 const BOM_ROWS_PER_SHEET = 25;
-const thinBorder = {
-  top: { style: "thin" },
-  left: { style: "thin" },
-  bottom: { style: "thin" },
-  right: { style: "thin" }
-};
 
+if (IS_PRODUCTION && !AUTH_ENABLED) {
+  throw new Error("Production requires APP_USERNAME, APP_PASSWORD, and AUTH_SECRET environment variables.");
+}
+if (AUTH_ENABLED && AUTH_SECRET.length < 32) {
+  throw new Error("AUTH_SECRET must contain at least 32 characters.");
+}
+
+app.set("trust proxy", 1);
 app.use(express.json({ limit: "1mb" }));
-app.use(express.static(path.join(__dirname, "../public")));
+
+function safeEqual(a, b) {
+  const left = Buffer.from(String(a));
+  const right = Buffer.from(String(b));
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+function sign(value) {
+  return crypto.createHmac("sha256", AUTH_SECRET).update(value).digest("base64url");
+}
+
+function readSession(req) {
+  if (!AUTH_ENABLED) return true;
+
+  const cookieHeader = req.headers.cookie || "";
+  const cookie = cookieHeader.split(";").map(part => part.trim())
+    .find(part => part.startsWith(SESSION_COOKIE + "="));
+  if (!cookie) return false;
+
+  const token = decodeURIComponent(cookie.slice(SESSION_COOKIE.length + 1));
+  const [payload, signature] = token.split(".");
+  if (!payload || !signature || !safeEqual(sign(payload), signature)) return false;
+
+  try {
+    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return session.username === AUTH_USERNAME && Number(session.exp) > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+function setSessionCookie(res, username) {
+  const payload = Buffer.from(JSON.stringify({
+    username,
+    exp: Date.now() + SESSION_DURATION_SECONDS * 1000
+  })).toString("base64url");
+  const token = payload + "." + sign(payload);
+  res.setHeader("Set-Cookie",
+    SESSION_COOKIE + "=" + encodeURIComponent(token) +
+    "; HttpOnly; Path=/; SameSite=Strict; Max-Age=" + SESSION_DURATION_SECONDS +
+    (IS_PRODUCTION ? "; Secure" : "")
+  );
+}
+
+function clearSessionCookie(res) {
+  res.setHeader("Set-Cookie",
+    SESSION_COOKIE + "=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0" +
+    (IS_PRODUCTION ? "; Secure" : "")
+  );
+}
+
+const loginAttempts = new Map();
+app.get("/login", (req, res) => {
+  if (!AUTH_ENABLED || readSession(req)) return res.redirect("/");
+  res.setHeader("Cache-Control", "no-store");
+  res.sendFile(path.join(__dirname, "../public/login.html"));
+});
+
+app.post("/api/login", (req, res) => {
+  if (!AUTH_ENABLED) return res.json({ success: true });
+
+  const ip = req.ip || req.socket.remoteAddress || "unknown";
+  const now = Date.now();
+  const attempt = loginAttempts.get(ip);
+  if (attempt && now < attempt.resetAt && attempt.count >= 10) {
+    return res.status(429).json({ error: "Too many attempts. Please wait 15 minutes and try again." });
+  }
+
+  const username = String(req.body?.username || "");
+  const password = String(req.body?.password || "");
+  if (!safeEqual(username, AUTH_USERNAME) || !safeEqual(password, AUTH_PASSWORD)) {
+    const current = attempt && now < attempt.resetAt
+      ? attempt
+      : { count: 0, resetAt: now + 15 * 60 * 1000 };
+    current.count += 1;
+    loginAttempts.set(ip, current);
+    return res.status(401).json({ error: "Incorrect username or password." });
+  }
+
+  loginAttempts.delete(ip);
+  setSessionCookie(res, AUTH_USERNAME);
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ success: true });
+});
+
+app.post("/api/logout", (_req, res) => {
+  clearSessionCookie(res);
+  res.json({ success: true });
+});
 
 app.get("/api/health", (_req, res) =>
   res.json({
@@ -25,6 +123,18 @@ app.get("/api/health", (_req, res) =>
     version: "0.1.0"
   })
 );
+
+if (AUTH_ENABLED) {
+  app.use((req, res, next) => {
+    if (readSession(req)) return next();
+    if (req.path.startsWith("/api/")) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+    return res.redirect("/login");
+  });
+}
+
+app.use(express.static(path.join(__dirname, "../public")));
 
 app.post("/api/parse-dxf-list", (req, res) => {
   const { filenames } = req.body ?? {};
@@ -87,7 +197,6 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
         { key: "total", width: 14 }
       ];
 
-      // Header labels and values: fixed labels stay in their specified cells.
       worksheet.getCell("B8").value = "CUSTOMER:";
       worksheet.getCell("C8").value = customerProject;
       worksheet.getCell("E8").value = "PO #:";
@@ -111,7 +220,6 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       worksheet.mergeCells("C11:K11");
       worksheet.getCell("C11").value = finish;
 
-      // BOM rows 12-36: 25 lines per worksheet.
       for (let i = 0; i < BOM_ROWS_PER_SHEET; i++) {
         const component = components[pageStart + i];
         const rowNumber = 12 + i;
@@ -124,7 +232,6 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           "";
 
         worksheet.mergeCells("B" + rowNumber + ":I" + rowNumber);
-
         worksheet.getCell("A" + rowNumber).value = component ? pageStart + i + 1 : "";
         worksheet.getCell("B" + rowNumber).value = component ? description : "";
         worksheet.getCell("J" + rowNumber).value =
@@ -139,45 +246,28 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           worksheet.getCell("K" + rowNumber).value = "";
         }
 
-        worksheet.getCell("A" + rowNumber).alignment = {
-          horizontal: "center",
-          vertical: "middle"
-        };
-        worksheet.getCell("B" + rowNumber).alignment = {
-          vertical: "top",
-          wrapText: true
-        };
-        worksheet.getCell("J" + rowNumber).alignment = {
-          horizontal: "center",
-          vertical: "middle"
-        };
-        worksheet.getCell("K" + rowNumber).alignment = {
-          horizontal: "center",
-          vertical: "middle"
-        };
+        worksheet.getCell("A" + rowNumber).alignment = { horizontal: "center", vertical: "middle" };
+        worksheet.getCell("B" + rowNumber).alignment = { vertical: "top", wrapText: true };
+        worksheet.getCell("J" + rowNumber).alignment = { horizontal: "center", vertical: "middle" };
+        worksheet.getCell("K" + rowNumber).alignment = { horizontal: "center", vertical: "middle" };
 
         for (const col of ["A", "B", "J", "K"]) {
-          worksheet.getCell(col + rowNumber).border = thinBorder;
+          worksheet.getCell(col + rowNumber).border = {
+            top: { style: "thin" }, left: { style: "thin" },
+            bottom: { style: "thin" }, right: { style: "thin" }
+          };
         }
         worksheet.getRow(rowNumber).height = 24;
       }
 
-      // Apply consistent header formatting after merges are defined.
-      for (const cellAddress of [
-        "B8", "E8", "H8", "B9", "E9", "H9", "B10", "B11"
-      ]) {
+      for (const cellAddress of ["B8", "E8", "H8", "B9", "E9", "H9", "B10", "B11"]) {
         worksheet.getCell(cellAddress).font = { bold: true };
-        worksheet.getCell(cellAddress).alignment = {
-          vertical: "middle",
-          horizontal: "left"
-        };
+        worksheet.getCell(cellAddress).alignment = { vertical: "middle", horizontal: "left" };
       }
 
       for (const cellAddress of ["C8", "F8", "I8", "C9", "F9", "I9", "C10", "C11"]) {
         worksheet.getCell(cellAddress).alignment = {
-          vertical: "middle",
-          horizontal: "left",
-          wrapText: true
+          vertical: "middle", horizontal: "left", wrapText: true
         };
       }
 
@@ -186,10 +276,8 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       }
 
       worksheet.pageSetup = {
-        orientation: "landscape",
-        fitToPage: true,
-        fitToWidth: 1,
-        fitToHeight: 1,
+        orientation: "landscape", fitToPage: true,
+        fitToWidth: 1, fitToHeight: 1,
         paperSize: worksheet.PAPERSIZE_LETTER
       };
       worksheet.pageSetup.printArea = "A1:K36";
@@ -201,14 +289,9 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
     const safeProject = String(projectNumber || projectName || "project").replace(/[^a-z0-9_-]+/gi, "_");
     const filename = "BOM - " + safeProject + " - " + safeFixture + ".xlsx";
 
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    res.setHeader(
-      "Content-Disposition",
-      'attachment; filename="' + filename + '"'
-    );
+    res.setHeader("Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", 'attachment; filename="' + filename + '"');
 
     await workbook.xlsx.write(res);
     res.end();
@@ -221,5 +304,5 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log("Sheet Metal Workflow running at http://localhost:" + PORT);
+  console.log("Sheet Metal Workflow listening on port " + PORT);
 });
