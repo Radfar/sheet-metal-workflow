@@ -30,7 +30,7 @@ function render() {
       '<td><input class="cell" data-field="componentLabel" value="' + esc(c.componentLabel) + '"></td>' +
       '<td><input class="cell" data-field="flatWidth" value="' + esc(c.flatWidth) + '"></td>' +
       '<td><input class="cell" data-field="flatHeight" value="' + esc(c.flatHeight) + '"></td>' +
-      '<td><input class="cell" type="number" min="0" data-field="quantityPerAssembly" value="' + esc(c.quantityPerAssembly) + '"></td>' +
+      '<td><input class="cell" type="number" min="0" step="any" data-field="quantityPerAssembly" value="' + esc(c.quantityPerAssembly) + '"></td>' +
       '<td><input class="cell notes" placeholder="Description" data-field="description" value="' + esc(c.description) + '">' +
         '<input class="cell notes" placeholder="Engineering notes" data-field="notes" value="' + esc(c.notes) + '"></td>' +
       '<td><button class="remove" data-remove="' + i + '">×</button></td>' +
@@ -105,7 +105,9 @@ $("exportBtn").addEventListener("click", async () => {
 
   try {
     const payload = {
+      customer: $("customer").value,
       projectName: $("projectName").value,
+      poNumber: $("poNumber").value,
       projectNumber: $("projectNumber").value,
       fixtureTag: $("fixtureTag").value,
       fixtureQuantity: $("fixtureQuantity").value,
