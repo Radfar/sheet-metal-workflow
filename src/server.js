@@ -80,7 +80,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
 
       worksheet.getCell("C9").value = fixtureTag;
       worksheet.getCell("C10").value = fixtureDescription;
-      worksheet.getCell("C12").value = finish;
+      worksheet.getCell("C11").value = finish;
 
       for (let i = 0; i < BOM_ROWS_PER_SHEET; i++) {
         const component = components[pageStart + i];
@@ -116,7 +116,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       worksheet.getCell("F9").font = { bold: true };
       worksheet.getCell("I9").font = { bold: true };
       worksheet.getCell("C10").font = { bold: true };
-      worksheet.getCell("C12").font = { bold: true };
+      worksheet.getCell("C11").font = { bold: true };
 
       worksheet.getCell("I8").alignment = { horizontal: "center" };
       worksheet.getCell("I9").alignment = { horizontal: "center" };
