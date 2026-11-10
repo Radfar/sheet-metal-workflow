@@ -113,7 +113,7 @@ app.post("/api/logout", (_req, res) => {
 app.get("/api/health", (_req, res) => res.json({
   status: "ok",
   application: "Sheet Metal Workflow",
-  version: "0.2.1"
+  version: "0.3.0"
 }));
 
 if (AUTH_ENABLED) {
