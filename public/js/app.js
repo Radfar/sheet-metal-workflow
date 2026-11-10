@@ -136,6 +136,7 @@ function rebuildComponents() {
       }
     }
 
+    const matchedDxf = dxfIndex === "" ? null : dxfFiles[Number(dxfIndex)];
     return {
       ...clone(line),
       itemNo: line.itemNo,
@@ -144,6 +145,9 @@ function rebuildComponents() {
       description,
       descriptionDraft,
       dxfIndex,
+      materialCode: line.materialCode || matchedDxf?.materialCode || "",
+      flatPatternWidth: line.flatPatternWidth || matchedDxf?.flatWidth || "",
+      flatPatternHeight: line.flatPatternHeight || matchedDxf?.flatHeight || "",
       manual: Boolean(line.manual)
     };
   });
