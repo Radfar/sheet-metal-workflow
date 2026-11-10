@@ -238,6 +238,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       poNumber = "",
       projectNumber = "",
       fixtureTag = "",
+      scheduleRowNumber = "",
       fixtureQuantity = "",
       fixtureDescription = "",
       finish = "",
@@ -365,8 +366,11 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
 
     const safeSegment = value => String(value || "").replace(/[<>:"/\\|?*\x00-\x1F]/g, "").replace(/\s+/g, " ").trim();
     const safePo = safeSegment(poNumber) || "TBD";
-    const safeDescription = safeSegment(bomFilenameDescription) || safeSegment(fixtureTag) || "Fixture BOM";
-    const filename = "BOM - PO " + safePo + " - " + safeDescription + ".xlsx";
+    const safeRow = safeSegment(scheduleRowNumber);
+    const safeTag = safeSegment(fixtureTag) || "Fixture";
+    const safeDescription = safeSegment(bomFilenameDescription);
+    const filename = "BOM - PO " + safePo + (safeRow ? "(" + safeRow + ")" : "") +
+      " - " + safeTag + (safeDescription ? " " + safeDescription : "") + ".xlsx";
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="' + filename + '"');
     await workbook.xlsx.write(res);
