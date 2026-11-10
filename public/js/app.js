@@ -154,8 +154,7 @@ function renderComponents() {
   const body = $("componentRows");
 
   if (!components.length) {
-    body.innerHTML = '<tr><td colspan="8" class="empty">Import the SolidWorks BOM for ' +
-      esc(currentFixtureTag) + '. DXF filenames can be parsed before or after the BOM import.</td></tr>';
+    body.innerHTML = '<tr><td colspan="8" class="empty">Import a SolidWorks BOM to begin.</td></tr>';
     renderSummary();
     return;
   }
@@ -263,19 +262,26 @@ $("addScheduleRowBtn").addEventListener("click", () => {
 $("importBomBtn").addEventListener("click", async () => {
   const file = $("solidworksFile").files[0];
   if (!file) {
-    $("bomStatus").textContent = "Choose the original SolidWorks .xlsx file first.";
+    $("bomStatus").textContent = "Choose the original SolidWorks .xls or .xlsx file first.";
     $("bomStatus").className = "error";
     return;
   }
+  const extension = file.name.split(".").pop().toLowerCase();
+  if (!["xls", "xlsx"].includes(extension)) {
+    $("bomStatus").textContent = "Unsupported file type. Choose an .xls or .xlsx workbook.";
+    $("bomStatus").className = "error";
+    return;
+  }
+
   const button = $("importBomBtn");
   button.disabled = true;
-  $("bomStatus").textContent = "Reading SolidWorks BOM…";
+  $("bomStatus").textContent = "Reading SolidWorks BOM (" + extension.toUpperCase() + ")…";
   $("bomStatus").className = "status-text";
 
   try {
     const response = await fetch("/api/import-solidworks-bom", {
       method:"POST",
-      headers:{"Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+      headers:{"Content-Type":"application/octet-stream"},
       body:file
     });
     const data = await response.json();
@@ -283,7 +289,8 @@ $("importBomBtn").addEventListener("click", async () => {
     bomLines = data.components.map(line => ({...line, manual:false}));
     rebuildComponents();
     saveCurrentFixture();
-    $("bomStatus").textContent = data.count + " items imported from worksheet '" + data.worksheet + "'.";
+    $("bomStatus").textContent = data.count + " items imported from '" + data.worksheet +
+      "' (" + extension.toUpperCase() + ").";
     $("bomStatus").className = "ok";
   } catch (error) {
     $("bomStatus").textContent = error.message;
