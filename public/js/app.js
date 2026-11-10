@@ -111,10 +111,13 @@ const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["mate
 
 function engineeringExample(key, component) {
   const part = String(component.partNumber || "").toUpperCase();
-  const isChannel = /TROUGH|CHANNEL|CHN/.test(part);
-  const isAngle = /ANG/.test(part);
-  const isPlate = /ENDCAP|SPLICE|PLT/.test(part);
-  const isGusset = /GUS/.test(part);
+  const matchedDxf = component.dxfIndex === "" || component.dxfIndex == null
+    ? null : dxfFiles[Number(component.dxfIndex)];
+  const identity = part + " " + String(matchedDxf?.componentLabel || "").toUpperCase();
+  const isChannel = /TROUGH|CHANNEL|CHN/.test(identity);
+  const isAngle = /ANG/.test(identity);
+  const isPlate = /ENDCAP|SPLICE|PLT/.test(identity);
+  const isGusset = /GUS/.test(identity);
   const examples = {
     componentType: isChannel ? "Suggested type: Channel — verify" : isAngle ? "Suggested type: Angle — verify" : isPlate ? "Suggested type: Plate — verify" : isGusset ? "Suggested type: Gusset — verify" : "Select the type shown on the drawing",
     materialCode: "e.g. C11 or C16 (DXF token only)",
