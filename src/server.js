@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import ExcelJS from "exceljs";
+import * as XLSX from "xlsx";
 import { parseDxfList } from "./parser.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -112,7 +113,7 @@ app.post("/api/logout", (_req, res) => {
 app.get("/api/health", (_req, res) => res.json({
   status: "ok",
   application: "Sheet Metal Workflow",
-  version: "0.2.0"
+  version: "0.2.1"
 }));
 
 if (AUTH_ENABLED) {
@@ -147,39 +148,40 @@ function cellText(value) {
 app.post(
   "/api/import-solidworks-bom",
   express.raw({
-    type: [
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "application/octet-stream"
-    ],
+    type: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream"],
     limit: "10mb"
   }),
   async (req, res) => {
     try {
       if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
-        return res.status(400).json({ error: "Select a SolidWorks BOM .xlsx file." });
+        return res.status(400).json({ error: "Select a SolidWorks BOM .xls or .xlsx file." });
       }
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(req.body);
+
+      // SheetJS reads both legacy BIFF .xls files and modern .xlsx workbooks.
+      const workbook = XLSX.read(req.body, { type: "buffer", cellDates: false });
       let headerInfo = null;
 
-      for (const worksheet of workbook.worksheets) {
-        for (let rowNumber = 1; rowNumber <= Math.min(worksheet.rowCount, 40); rowNumber++) {
-          const row = worksheet.getRow(rowNumber);
+      for (const sheetName of workbook.SheetNames) {
+        const worksheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", raw: true });
+        for (let rowIndex = 0; rowIndex < Math.min(rows.length, 40); rowIndex++) {
           const headers = {};
-          row.eachCell({ includeEmpty: false }, (cell, columnNumber) => {
-            const key = normalizeHeader(cellText(cell.value));
-            if (key) headers[key] = columnNumber;
+          rows[rowIndex].forEach((value, columnIndex) => {
+            const key = normalizeHeader(cellText(value));
+            if (key) headers[key] = columnIndex;
           });
-          const partColumn = headers.PARTNUMBER || headers.PARTNO || headers.PART;
-          const qtyColumn = headers.QTY || headers.QUANTITY;
-          if (partColumn && qtyColumn) {
+
+          const partColumn = headers.PARTNUMBER ?? headers.PARTNO ?? headers.PART;
+          const qtyColumn = headers.QTY ?? headers.QUANTITY;
+          if (partColumn !== undefined && qtyColumn !== undefined) {
             headerInfo = {
-              worksheet,
-              headerRow: rowNumber,
+              sheetName,
+              rows,
+              headerRow: rowIndex,
               partColumn,
               qtyColumn,
-              itemColumn: headers.ITEMNO || headers.ITEM,
-              descriptionColumn: headers.DESCRIPTION || headers.DESC
+              itemColumn: headers.ITEMNO ?? headers.ITEM,
+              descriptionColumn: headers.DESCRIPTION ?? headers.DESC
             };
             break;
           }
@@ -193,20 +195,19 @@ app.post(
         });
       }
 
-      const { worksheet, headerRow, partColumn, qtyColumn, itemColumn, descriptionColumn } = headerInfo;
+      const { sheetName, rows, headerRow, partColumn, qtyColumn, itemColumn, descriptionColumn } = headerInfo;
       const lines = [];
-      for (let rowNumber = headerRow + 1; rowNumber <= worksheet.rowCount; rowNumber++) {
-        const row = worksheet.getRow(rowNumber);
-        const partNumber = cellText(row.getCell(partColumn).value);
-        const rawQty = row.getCell(qtyColumn).value;
-        const quantityText = cellText(rawQty);
+      for (let rowIndex = headerRow + 1; rowIndex < rows.length; rowIndex++) {
+        const row = rows[rowIndex];
+        const partNumber = cellText(row[partColumn]);
+        const quantityText = cellText(row[qtyColumn]).replace(/,/g, "");
         if (!partNumber && !quantityText) continue;
-        const quantity = Number(quantityText);
         if (!partNumber) continue;
+        const quantity = Number(quantityText);
         lines.push({
-          itemNo: itemColumn ? cellText(row.getCell(itemColumn).value) : String(lines.length + 1),
+          itemNo: itemColumn !== undefined ? cellText(row[itemColumn]) : String(lines.length + 1),
           partNumber,
-          description: descriptionColumn ? cellText(row.getCell(descriptionColumn).value) : "",
+          description: descriptionColumn !== undefined ? cellText(row[descriptionColumn]) : "",
           quantityPerAssembly: Number.isFinite(quantity) ? quantity : ""
         });
       }
@@ -221,10 +222,10 @@ app.post(
             invalid.map(line => line.partNumber).join(", ")
         });
       }
-      res.json({ components: lines, count: lines.length, worksheet: worksheet.name });
+      res.json({ components: lines, count: lines.length, worksheet: sheetName });
     } catch (error) {
       console.error("SolidWorks BOM import failed:", error);
-      res.status(400).json({ error: "Could not read this Excel file. Please use the original SolidWorks .xlsx export." });
+      res.status(400).json({ error: "Could not read this Excel file. Please check that it is a valid, unprotected .xls or .xlsx workbook." });
     }
   }
 );
