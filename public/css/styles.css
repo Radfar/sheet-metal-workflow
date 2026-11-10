@@ -75,3 +75,14 @@ footer{text-align:center;color:#9aa4ad;font-size:10px;padding:18px}
  .fixture-picker{align-items:stretch}
  .fixture-picker label,.fixture-picker select{width:100%}
 }
+/* Structured manufacturing data editor */
+.engineering-row td{padding:0 8px 10px;border-top:0}
+.engineering-details{border:1px solid #e3e8ec;border-radius:6px;background:#fafbfc;padding:9px 11px}
+.engineering-details summary{font-size:10px;font-weight:700;color:#38546b;cursor:pointer}
+.engineering-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin-top:12px}
+.engineering-grid label{display:flex;flex-direction:column;gap:5px;font-size:10px;font-weight:650;color:#586674;min-width:0}
+.engineering-input{width:100%;min-width:0;height:32px;padding:6px 7px;border:1px solid #d8dfe5;border-radius:4px;background:white;color:#263542;font:inherit;font-weight:400}
+.engineering-actions{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
+.engineering-actions span{font-size:10px;color:#87939d}
+@media(max-width:900px){.engineering-grid{grid-template-columns:repeat(2,minmax(130px,1fr))}}
+@media(max-width:520px){.engineering-grid{grid-template-columns:1fr}}
