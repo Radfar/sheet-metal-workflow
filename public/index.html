@@ -71,9 +71,9 @@
 
   <section class="panel">
     <div class="heading"><h2><b>03</b> SolidWorks BOM import</h2><small>Component list and quantities</small></div>
-    <p class="notice">Import the original SolidWorks Excel BOM (.xlsx). The application reads Item No., Part Number, Description and Qty. It does not change the source file.</p>
+    <p class="notice">Import the original SolidWorks Excel BOM (.xls or .xlsx). The application reads Item No., Part Number, Description and Qty. It does not change the source file.</p>
     <div class="file-actions">
-      <input id="solidworksFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+      <input id="solidworksFile" type="file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
       <button id="importBomBtn" type="button">Import SolidWorks BOM</button>
       <span id="bomStatus" class="status-text">No SolidWorks BOM imported for this fixture.</span>
     </div>
@@ -115,7 +115,7 @@
     </div>
   </section>
 
-  <footer>V0.2 · Draft engineering data only · Manufacturing descriptions require engineering review</footer>
+  <footer>V0.2.1 · Draft engineering data only · Manufacturing descriptions require engineering review</footer>
 </main>
 <script src="/js/app.js"></script>
 </body>
