@@ -621,6 +621,7 @@ $("exportBtn").addEventListener("click", async () => {
       poNumber:$("poNumber").value,
       projectNumber:$("projectNumber").value,
       fixtureTag:$("fixtureTag").value,
+      scheduleRowNumber:(schedule.find(item => item.tag === $("fixtureTag").value) || {}).no || "",
       fixtureQuantity:$("fixtureQuantity").value,
       fixtureDescription:$("fixtureDescription").value,
       finish:[$("finish").value, $("finishDescription").value].filter(Boolean).join(" = "),
