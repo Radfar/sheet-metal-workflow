@@ -13,13 +13,14 @@ A Node.js web application for preparing fixture BOMs from SolidWorks BOM exports
 ## BOM data sources
 - SolidWorks BOM is the source for item number, part number and quantity per fixture.
 - DXF filenames provide source-file traceability, material-code tokens and flat-pattern dimensions where recognizable.
-- Manufacturing descriptions are reviewed and entered by engineering. They are not invented from incomplete filename data.
+- If a SolidWorks description is blank, the app creates a clearly labelled draft from the matched DXF filename: component type, part number, flat-pattern dimensions and the original material-code token. Engineering must review and edit the draft before release.
+- The app does not infer material grade, gauge, finished profile dimensions or manufacturing process from C11/C16 or flat-pattern dimensions.
 - Purchased items can remain in the BOM without an associated DXF file.
 - Project total quantity is calculated in Excel as quantity per fixture multiplied by the selected fixture quantity.
 
 ## Engineering safeguards
 - Original DXF filenames are preserved.
-- C11/C16 are not automatically converted into material grades or gauges.
+- C11/C16 are displayed only as source material-code tokens; they are not automatically converted into material grades or gauges.
 - Filename dimensions are treated as flat-pattern dimensions, not finished profile dimensions.
 - Unmatched SolidWorks items remain in the BOM and can be marked as purchased/no-DXF items.
 - DXF matching is a convenience only and must be reviewed before release.
