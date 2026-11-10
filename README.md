@@ -62,3 +62,12 @@ The user can build a draft BOM description from the entered fields using the Cha
 
 ## Contextual engineering examples
 The manufacturing-data editor displays field-level examples drawn from the previously supplied BOM patterns (channel, angle, plate and return gusset). Examples are prompts only, not data for the current fixture. The component type field also displays a part-number-based suggestion that the user must confirm. Users must enter values from the current drawing and verify all material, gauge, dimensions and processes before generating the description.
+
+
+## Excel BOM output template (V0.4.0)
+- The project PO number is shared across all fixture BOMs in the project.
+- Exported filenames follow `BOM - PO {PO Number} - {Fixture Description}.xlsx`. Each fixture has an editable BOM filename description; an empty PO is shown as `TBD`.
+- Upload the Stellar logo once as a PNG or JPEG (maximum 2 MB). It is retained in the current browser local storage and embedded in cells A1:D7 on each exported worksheet. The logo is browser-specific and is not uploaded to a server until an export is generated.
+- Rows 8 through 36 have a fixed height of 33 points.
+- Footer labels are written at A38 (Finish Date), G38 (Shift Date), K38 (Track Number #1), A39 (Note), A42 (Cut By), and H42 (Cut Date). The print area is A1:K42.
+- The logo and footer are repeated on each worksheet when a BOM spans multiple sheets.

@@ -5,6 +5,18 @@ let bomLines = [];
 let dxfFiles = [];
 let currentFixtureTag = "";
 const fixtureData = {};
+const LOGO_STORAGE_KEY = "sheetMetalWorkflow.stellarLogoDataUrl";
+
+function getSavedLogo() {
+  try { return localStorage.getItem(LOGO_STORAGE_KEY) || ""; } catch { return ""; }
+}
+
+function makeBomFilename() {
+  const clean = value => String(value || "").replace(/[<>:"/\\|?*\x00-\x1F]/g, "").replace(/\s+/g, " ").trim();
+  const po = clean($("poNumber").value) || "TBD";
+  const description = clean($("bomFilenameDescription").value) || clean($("fixtureTag").value) || "Fixture BOM";
+  return "BOM - PO " + po + " - " + description + ".xlsx";
+}
 
 const schedule = [
   {no:1,tag:"T01A",mounting:"Recessed in GWB ceiling",height:"N/A",profile:"Linear",width:'9"',length:'365"',finish:"M-12 EA",qty:2},
@@ -198,7 +210,8 @@ function saveCurrentFixture() {
     dxfFiles: clone(dxfFiles),
     components: clone(components),
     dxfText: $("dxfInput").value,
-    finishDescription: $("finishDescription").value
+    finishDescription: $("finishDescription").value,
+    bomFilenameDescription: $("bomFilenameDescription").value
   };
 }
 
@@ -315,6 +328,7 @@ function loadFixture(tag) {
   $("fixtureDescription").value = fixtureDescriptionFromSchedule(item);
   $("finish").value = item.finish;
   $("finishDescription").value = fixtureData[item.tag]?.finishDescription || "";
+  $("bomFilenameDescription").value = fixtureData[item.tag]?.bomFilenameDescription || "";
   $("currentFixtureLabel").textContent = item.tag + " · " + item.qty + " fixture(s)";
 
   const saved = fixtureData[item.tag];
@@ -332,6 +346,47 @@ function loadFixture(tag) {
   $("scheduleStatus").className = "ok";
   render();
 }
+
+
+$("bomFilenameDescription").addEventListener("input", saveCurrentFixture);
+
+const logoInput = $("logoFile");
+if (getSavedLogo()) {
+  $("logoStatus").textContent = "Stellar logo is saved in this browser and will be included in BOM exports.";
+  $("logoStatus").className = "ok";
+}
+logoInput.addEventListener("change", () => {
+  const file = logoInput.files[0];
+  if (!file) return;
+  if (!/^image\/(png|jpeg)$/.test(file.type)) {
+    $("logoStatus").textContent = "Unsupported image. Please choose a PNG or JPEG file.";
+    $("logoStatus").className = "error";
+    logoInput.value = "";
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    $("logoStatus").textContent = "Logo is too large. Please use an image smaller than 2 MB.";
+    $("logoStatus").className = "error";
+    logoInput.value = "";
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      localStorage.setItem(LOGO_STORAGE_KEY, String(reader.result));
+      $("logoStatus").textContent = "Stellar logo saved in this browser. It will be included in every exported fixture BOM.";
+      $("logoStatus").className = "ok";
+    } catch {
+      $("logoStatus").textContent = "Could not save the logo in browser storage. Try a smaller image.";
+      $("logoStatus").className = "error";
+    }
+  };
+  reader.onerror = () => {
+    $("logoStatus").textContent = "Could not read this image file.";
+    $("logoStatus").className = "error";
+  };
+  reader.readAsDataURL(file);
+});
 
 $("fixtureSelect").addEventListener("change", () => {
   $("scheduleStatus").textContent = "Click Load fixture to switch to " + $("fixtureSelect").value + ".";
@@ -565,6 +620,8 @@ $("exportBtn").addEventListener("click", async () => {
       fixtureQuantity:$("fixtureQuantity").value,
       fixtureDescription:$("fixtureDescription").value,
       finish:[$("finish").value, $("finishDescription").value].filter(Boolean).join(" = "),
+      bomFilenameDescription:$("bomFilenameDescription").value,
+      logoDataUrl:getSavedLogo(),
       components:components.map(component => ({
         itemNo:component.itemNo,
         partNumber:component.partNumber,
@@ -587,8 +644,7 @@ $("exportBtn").addEventListener("click", async () => {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "BOM - " + ($("projectNumber").value || $("projectName").value || "project") +
-      " - " + ($("fixtureTag").value || "fixture") + ".xlsx";
+    anchor.download = makeBomFilename();
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();

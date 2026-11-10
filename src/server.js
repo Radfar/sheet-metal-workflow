@@ -26,7 +26,7 @@ if (AUTH_ENABLED && AUTH_SECRET.length < 32) {
 }
 
 app.set("trust proxy", 1);
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "5mb" }));
 
 function safeEqual(a, b) {
   const left = Buffer.from(String(a));
@@ -113,7 +113,7 @@ app.post("/api/logout", (_req, res) => {
 app.get("/api/health", (_req, res) => res.json({
   status: "ok",
   application: "Sheet Metal Workflow",
-  version: "0.3.0"
+  version: "0.4.0"
 }));
 
 if (AUTH_ENABLED) {
@@ -241,6 +241,8 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       fixtureQuantity = "",
       fixtureDescription = "",
       finish = "",
+      bomFilenameDescription = "",
+      logoDataUrl = "",
       components = []
     } = req.body ?? {};
 
@@ -257,6 +259,12 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
 
     for (let pageStart = 0, page = 1; pageStart < components.length; pageStart += BOM_ROWS_PER_SHEET, page++) {
       const worksheet = workbook.addWorksheet(page === 1 ? "BOM" : "BOM " + page);
+      if (logoDataUrl) {
+        const match = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(logoDataUrl);
+        if (!match) throw new Error("Logo must be a PNG or JPEG image.");
+        const imageId = workbook.addImage({ base64: logoDataUrl, extension: match[1] === "jpeg" ? "jpeg" : "png" });
+        worksheet.addImage(imageId, { tl: { col: 0, row: 0 }, br: { col: 4, row: 7 }, editAs: "oneCell" });
+      }
       worksheet.columns = [
         { key: "item", width: 7 },
         { key: "description", width: 14 },
@@ -320,7 +328,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
             bottom: { style: "thin" }, right: { style: "thin" }
           };
         }
-        worksheet.getRow(rowNumber).height = 27;
+        worksheet.getRow(rowNumber).height = 33;
       }
 
       for (const address of ["B8", "E8", "H8", "B9", "E9", "H9", "B10", "B11"]) {
@@ -330,7 +338,18 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       for (const address of ["C8", "F8", "I8", "C9", "F9", "I9", "C10", "C11"]) {
         worksheet.getCell(address).alignment = { vertical: "middle", horizontal: "left", wrapText: true };
       }
-      for (const rowNumber of [8, 9, 10, 11]) worksheet.getRow(rowNumber).height = rowNumber >= 10 ? 30 : 22;
+      for (let rowNumber = 8; rowNumber <= 11; rowNumber++) worksheet.getRow(rowNumber).height = 33;
+
+      worksheet.getCell("A38").value = "Finish Date";
+      worksheet.getCell("G38").value = "Shift Date";
+      worksheet.getCell("K38").value = "Track Number #1";
+      worksheet.getCell("A39").value = "Note";
+      worksheet.getCell("A42").value = "Cut By";
+      worksheet.getCell("H42").value = "Cut Date";
+      for (const address of ["A38", "G38", "K38", "A39", "A42", "H42"]) {
+        worksheet.getCell(address).font = { bold: true };
+        worksheet.getCell(address).alignment = { vertical: "middle", horizontal: "left" };
+      }
 
       worksheet.pageSetup = {
         orientation: "landscape",
@@ -339,14 +358,15 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
         fitToHeight: 1,
         paperSize: worksheet.PAPERSIZE_LETTER
       };
-      worksheet.pageSetup.printArea = "A1:K36";
+      worksheet.pageSetup.printArea = "A1:K42";
       worksheet.pageSetup.horizontalCentered = false;
       worksheet.views = [{ state: "normal" }];
     }
 
-    const safeFixture = String(fixtureTag || "BOM").replace(/[^a-z0-9_-]+/gi, "_");
-    const safeProject = String(projectNumber || projectName || "project").replace(/[^a-z0-9_-]+/gi, "_");
-    const filename = "BOM - " + safeProject + " - " + safeFixture + ".xlsx";
+    const safeSegment = value => String(value || "").replace(/[<>:"/\\|?*\x00-\x1F]/g, "").replace(/\s+/g, " ").trim();
+    const safePo = safeSegment(poNumber) || "TBD";
+    const safeDescription = safeSegment(bomFilenameDescription) || safeSegment(fixtureTag) || "Fixture BOM";
+    const filename = "BOM - PO " + safePo + " - " + safeDescription + ".xlsx";
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="' + filename + '"');
     await workbook.xlsx.write(res);
