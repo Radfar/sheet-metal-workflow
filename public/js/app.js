@@ -160,7 +160,8 @@ function saveCurrentFixture() {
     bomLines: clone(bomLines),
     dxfFiles: clone(dxfFiles),
     components: clone(components),
-    dxfText: $("dxfInput").value
+    dxfText: $("dxfInput").value,
+    finishDescription: $("finishDescription").value
   };
 }
 
@@ -276,6 +277,7 @@ function loadFixture(tag) {
   $("fixtureQuantity").value = item.qty;
   $("fixtureDescription").value = fixtureDescriptionFromSchedule(item);
   $("finish").value = item.finish;
+  $("finishDescription").value = fixtureData[item.tag]?.finishDescription || "";
   $("currentFixtureLabel").textContent = item.tag + " · " + item.qty + " fixture(s)";
 
   const saved = fixtureData[item.tag];
@@ -525,7 +527,7 @@ $("exportBtn").addEventListener("click", async () => {
       fixtureTag:$("fixtureTag").value,
       fixtureQuantity:$("fixtureQuantity").value,
       fixtureDescription:$("fixtureDescription").value,
-      finish:$("finish").value,
+      finish:[$("finish").value, $("finishDescription").value].filter(Boolean).join(" = "),
       components:components.map(component => ({
         itemNo:component.itemNo,
         partNumber:component.partNumber,
