@@ -384,7 +384,7 @@ function bindBrandingUpload(assetName, label) {
     const file = input.files[0];
     if (!file) return;
     const status = $(assetName + "Status");
-    if (!/^image\\/(png|jpeg)$/.test(file.type)) {
+    if (!/^image\/(png|jpeg)$/.test(file.type)) {
       status.textContent = "Unsupported image. Please choose a PNG or JPEG file.";
       status.className = "error";
       input.value = "";
