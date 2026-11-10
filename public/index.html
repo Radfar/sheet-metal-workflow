@@ -1,38 +1,122 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sheet Metal Workflow | BOM Generator</title><link rel="stylesheet" href="/css/styles.css"></head>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sheet Metal Workflow | BOM Generator</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
 <body>
-<header class="topbar"><div class="brand">SM</div><div><strong>Sheet Metal Workflow</strong><small>Engineering tools for fabrication</small></div><button id="logoutBtn" class="secondary" type="button">Sign out</button></header>
+<header class="topbar">
+  <div class="brand">SM</div>
+  <div><strong>Sheet Metal Workflow</strong><small>Engineering tools for fabrication</small></div>
+  <button id="logoutBtn" class="secondary" type="button">Sign out</button>
+</header>
+
 <main class="layout">
-<section class="intro"><p class="eyebrow">WORKSPACE / BOM GENERATOR</p><h1>Build a manufacturing-ready BOM.</h1><p>Start with project details and fixture schedule data. Then add DXF filenames, review the extracted components, and generate the project summary.</p></section>
+  <section class="intro">
+    <p class="eyebrow">WORKSPACE / BOM GENERATOR</p>
+    <h1>Build a manufacturing-ready BOM.</h1>
+    <p>Select a fixture, import its SolidWorks BOM and DXF filenames, review the matches, and export the BOM in the agreed Excel layout.</p>
+  </section>
 
-<section class="panel"><div class="heading"><h2><b>01</b> Project & fixture schedule</h2><small>Project reference</small></div>
-<div class="grid">
-<label>Project name<input id="projectName" value="Menlo Park"></label>
-<label>Store number<input id="projectNumber" value="2605"></label>
-<label>Customer<input id="customer" value="Aritzia"></label>
-<label>PO number<input id="poNumber" value=""></label>
-<label class="wide">Schedule reference<input id="scheduleReference" value="20260828_2605 Menlo Park_IFT Architectural"></label>
-</div>
-<div class="schedule-wrap">
-<table class="schedule-table">
-<thead><tr><th>#</th><th>Tag</th><th>Mounting</th><th>Height AFF</th><th>Rod length / Profile</th><th>Trough Width</th><th>Trough Length</th><th>Finish</th><th>Qty</th><th></th></tr></thead>
-<tbody id="scheduleRows"></tbody>
-</table>
-</div>
-<div class="actions"><button id="addScheduleRowBtn" class="secondary">Add schedule row</button><span id="scheduleStatus">Edit schedule values directly. Use a row to load its fixture into the BOM editor.</span></div>
-</section>
+  <section class="panel">
+    <div class="heading"><h2><b>01</b> Project & fixture selection</h2><small>Project reference</small></div>
+    <div class="grid">
+      <label>Project name<input id="projectName" value="Menlo Park"></label>
+      <label>Store number<input id="projectNumber" value="2605"></label>
+      <label>Customer<input id="customer" value="Aritzia"></label>
+      <label>PO number<input id="poNumber" value=""></label>
+      <label class="wide">Schedule reference<input id="scheduleReference" value="20260828_2605 Menlo Park_IFT Architectural"></label>
+    </div>
 
-<section class="panel"><div class="heading"><h2><b>02</b> Selected fixture & BOM inputs</h2><small>Current fixture</small></div><div class="grid">
-<label>Fixture tag<input id="fixtureTag" value="T01A"></label>
-<label>Project quantity<input id="fixtureQuantity" type="number" min="1" placeholder="Confirmed quantity"></label>
-<label class="wide">Fixture type<input id="fixtureDescription" value="Recessed trough plaster canopy"></label>
-<label>Finish<input id="finish" value=""></label>
-</div></section>
+    <div class="fixture-picker">
+      <label for="fixtureSelect">Fixture tag</label>
+      <select id="fixtureSelect"></select>
+      <button id="useFixtureBtn" type="button">Load fixture</button>
+      <span id="scheduleStatus" class="status-text">Select a fixture and load its schedule information.</span>
+    </div>
 
-<section class="panel"><div class="heading"><h2><b>03</b> DXF source filenames</h2><small>One filename per line</small></div><label for="dxfInput">Paste filenames from the DXF folder</label><textarea id="dxfInput" rows="8" placeholder="ARI C11 2605 T01A -ANG 1-92.625x2.18&#10;ARI C16 2605 T01A-A TROUGH 91.187x24.171"></textarea><div class="actions"><button id="parseBtn">Parse filenames</button><span id="parseStatus">Original filenames are preserved for traceability.</span></div></section>
+    <div class="table-wrap selected-schedule-wrap">
+      <table class="selected-schedule">
+        <thead><tr><th>Tag</th><th>Mounting</th><th>Height AFF</th><th>Profile</th><th>Width</th><th>Length</th><th>Finish</th><th>Project Qty</th></tr></thead>
+        <tbody id="selectedScheduleRow"><tr><td colspan="8" class="empty">No fixture selected.</td></tr></tbody>
+      </table>
+    </div>
 
-<section class="panel compact-panel"><div class="heading"><h2><b>04</b> Component review</h2><small id="rowCount">0 components</small></div><p class="notice">Review the extracted component data and quantities before generating the BOM.</p><div class="table-wrap"><table><thead><tr><th>Source filename</th><th>Fixture</th><th>Material code</th><th>Component label</th><th>Flat width</th><th>Flat height</th><th>Qty / assembly</th><th>Description</th><th></th></tr></thead><tbody id="componentRows"><tr><td colspan="9" class="empty">Paste filenames and select Parse filenames to begin.</td></tr></tbody></table></div><div class="actions spread"><button id="addRowBtn" class="secondary">Add component manually</button><button id="exportBtn" disabled>Export BOM XLSX</button></div></section>
+    <details class="schedule-editor">
+      <summary>Edit full project schedule (all fixtures)</summary>
+      <div class="table-wrap">
+        <table class="schedule-table">
+          <thead><tr><th>#</th><th>Tag</th><th>Mounting</th><th>Height AFF</th><th>Rod length / Profile</th><th>Trough Width</th><th>Trough Length</th><th>Finish</th><th>Qty</th></tr></thead>
+          <tbody id="scheduleRows"></tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button id="addScheduleRowBtn" class="secondary" type="button">Add schedule row</button>
+        <span>Changes are used when you load a fixture.</span>
+      </div>
+    </details>
+  </section>
 
-<section class="panel"><div class="heading"><h2><b>05</b> Project schedule summary</h2><small>Final review</small></div><p class="notice">Generate this table after entering or reviewing the schedule. It is the project-level reference for the BOM work.</p><div class="actions"><button id="generateSummaryBtn">Generate project summary</button><span id="summaryStatus">No summary generated yet.</span></div><div class="table-wrap summary-wrap"><table><thead><tr><th>#</th><th>Tag</th><th>Mounting</th><th>Height AFF</th><th>Rod length / Profile</th><th>Trough Width</th><th>Trough Length</th><th>Finish</th><th>Qty</th><th>BOM Components</th></tr></thead><tbody id="summaryRows"><tr><td colspan="10" class="empty">Click Generate project summary to create the table.</td></tr></tbody></table></div></section>
+  <section class="panel">
+    <div class="heading"><h2><b>02</b> Selected fixture details</h2><small id="currentFixtureLabel">No fixture loaded</small></div>
+    <div class="grid">
+      <label>Fixture tag<input id="fixtureTag" readonly></label>
+      <label>Project quantity<input id="fixtureQuantity" type="number" min="0" step="any" readonly></label>
+      <label class="wide">Fixture description<input id="fixtureDescription" placeholder="Confirm manufacturing fixture description"></label>
+      <label class="wide">Finish<input id="finish" placeholder="Schedule finish"></label>
+    </div>
+  </section>
 
-<footer>V0.1 · Draft engineering data only · No production release or CAD geometry validation</footer></main><script src="/js/app.js"></script></body></html>
+  <section class="panel">
+    <div class="heading"><h2><b>03</b> SolidWorks BOM import</h2><small>Component list and quantities</small></div>
+    <p class="notice">Import the original SolidWorks Excel BOM (.xlsx). The application reads Item No., Part Number, Description and Qty. It does not change the source file.</p>
+    <div class="file-actions">
+      <input id="solidworksFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+      <button id="importBomBtn" type="button">Import SolidWorks BOM</button>
+      <span id="bomStatus" class="status-text">No SolidWorks BOM imported for this fixture.</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="heading"><h2><b>04</b> DXF source filenames</h2><small>One filename per line</small></div>
+    <label class="input-label" for="dxfInput">Paste filenames from the selected fixture's DXF folder</label>
+    <textarea id="dxfInput" rows="5" placeholder="ARI C11 2605 T01A -ANG 1-92.625x2.18&#10;ARI C16 2605 ENDCAP 7.6875x9&#10;ARI C16 2605 T01A-A TROUGH 91.187x24.171"></textarea>
+    <div class="actions">
+      <button id="parseBtn" type="button">Parse and match DXF filenames</button>
+      <span id="parseStatus" class="status-text">DXF files are matched to the imported SolidWorks BOM where possible.</span>
+    </div>
+  </section>
+
+  <section class="panel compact-panel">
+    <div class="heading"><h2><b>05</b> BOM component review</h2><small id="rowCount">0 components</small></div>
+    <p class="notice">SolidWorks controls part numbers and quantities. Select a DXF match where needed and enter or confirm the final manufacturing description.</p>
+    <div class="table-wrap">
+      <table class="component-table">
+        <thead><tr><th>Item</th><th>Part number</th><th>Qty / fixture</th><th>DXF match</th><th>Material</th><th>Flat size</th><th>Manufacturing description (BOM output)</th><th></th></tr></thead>
+        <tbody id="componentRows"><tr><td colspan="8" class="empty">Import a SolidWorks BOM to begin.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="actions spread">
+      <button id="addRowBtn" class="secondary" type="button">Add BOM item manually</button>
+      <button id="exportBtn" disabled type="button">Generate BOM Excel</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="heading"><h2><b>06</b> Project schedule summary</h2><small>Final review</small></div>
+    <div class="actions"><button id="generateSummaryBtn" type="button">Generate project summary</button><span id="summaryStatus" class="status-text">No summary generated yet.</span></div>
+    <div class="table-wrap summary-wrap">
+      <table class="summary-table">
+        <thead><tr><th>#</th><th>Tag</th><th>Mounting</th><th>Profile</th><th>Width</th><th>Length</th><th>Finish</th><th>Qty</th><th>BOM items</th></tr></thead>
+        <tbody id="summaryRows"><tr><td colspan="9" class="empty">Click Generate project summary to create the table.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>V0.2 · Draft engineering data only · Manufacturing descriptions require engineering review</footer>
+</main>
+<script src="/js/app.js"></script>
+</body>
+</html>
