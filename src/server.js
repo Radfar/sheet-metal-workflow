@@ -140,7 +140,7 @@ async function readTemplateAssets() {
 }
 
 function validateImageDataUrl(dataUrl) {
-  const match = /^data:image\\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ""));
+  const match = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ""));
   if (!match) throw new Error("Image must be a PNG or JPEG file.");
   const bytes = Buffer.from(match[2], "base64");
   if (!bytes.length || bytes.length > 2 * 1024 * 1024) {
@@ -410,6 +410,15 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       for (const address of ["A38", "G38", "K38", "A39", "A42", "H42"]) {
         worksheet.getCell(address).font = { bold: true };
         worksheet.getCell(address).alignment = { vertical: "middle", horizontal: "left" };
+      }
+
+      // Apply the requested workbook typography consistently, preserving bold and other font attributes.
+      for (let rowNumber = 1; rowNumber <= 42; rowNumber++) {
+        const row = worksheet.getRow(rowNumber);
+        for (let colNumber = 1; colNumber <= 11; colNumber++) {
+          const cell = row.getCell(colNumber);
+          cell.font = { ...cell.font, name: "Arial", size: 10 };
+        }
       }
 
       worksheet.pageSetup = {
