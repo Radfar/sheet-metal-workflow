@@ -86,3 +86,7 @@ footer{text-align:center;color:#9aa4ad;font-size:10px;padding:18px}
 .engineering-actions span{font-size:10px;color:#87939d}
 @media(max-width:900px){.engineering-grid{grid-template-columns:repeat(2,minmax(130px,1fr))}}
 @media(max-width:520px){.engineering-grid{grid-template-columns:1fr}}
+
+.engineering-guidance{font-size:10px;color:#7a6844;background:#fff8e9;padding:7px 9px;border-radius:4px;margin:10px 0 0}
+.field-example{font-size:9px;line-height:1.35;color:#87939d;font-weight:400}
+.engineering-grid label{align-self:start}
