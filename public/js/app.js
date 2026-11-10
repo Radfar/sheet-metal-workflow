@@ -109,13 +109,47 @@ function makeDraftDescription(partNumber, dxf) {
 
 const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
 
+function engineeringExample(key, component) {
+  const part = String(component.partNumber || "").toUpperCase();
+  const isChannel = /TROUGH|CHANNEL|CHN/.test(part);
+  const isAngle = /ANG/.test(part);
+  const isPlate = /ENDCAP|SPLICE|PLT/.test(part);
+  const isGusset = /GUS/.test(part);
+  const examples = {
+    componentType: isChannel ? "Suggested type: Channel — verify" : isAngle ? "Suggested type: Angle — verify" : isPlate ? "Suggested type: Plate — verify" : isGusset ? "Suggested type: Gusset — verify" : "Select the type shown on the drawing",
+    materialCode: "e.g. C11 or C16 (DXF token only)",
+    materialGrade: "Enter the full material callout from the drawing",
+    gauge: "e.g. 16GA. or 11GA. — verify on drawing",
+    crossSectionDimensions: isAngle ? 'e.g. 1" x 1 3/8"' : 'e.g. 7 11/16" x 9" x 7 11/16"',
+    geometryDimensions: 'e.g. 1 3/4" x 8 13/16" x 1 3/4"',
+    profileType: "e.g. Chn'l",
+    additionalDimensions: 'e.g. 6 1/16" & 1 3/4"',
+    overallLength: isAngle ? 'e.g. 78 7/8" or 11 3/4"' : 'e.g. 77 7/16" or 141 7/8"',
+    plateLength: isPlate ? 'e.g. 7 11/16"' : 'e.g. 2"',
+    plateWidth: isPlate ? 'e.g. 9"' : 'e.g. 8"',
+    flatPatternWidth: "Copied from matched DXF when available",
+    flatPatternHeight: "Copied from matched DXF when available",
+    manufacturingProcess: isPlate ? "e.g. Laser" : "e.g. Laser/SM — confirm process",
+    partIdentification: "e.g. T02-A, T02-ANG-L/H or ENDCAP",
+    pieceCount: "e.g. 2 (only if made in multiple pieces)",
+    pieceLengths: "e.g. 99.9375 / 41.9375 (inches)",
+    hardwareSize: "e.g. #8",
+    hardwareType: "e.g. RH Tek Screw",
+    hardwareLength: 'e.g. 1/2"',
+    drawingReference: "e.g. sheet / detail / drawing number",
+    manufacturingNotes: "e.g. return, orientation, weld or assembly note"
+  };
+  return examples[key] || "Enter verified drawing value";
+}
+
 function renderManufacturingFields(component, index) {
   const typeOptions = ["", "Channel", "Angle", "Plate", "Gusset", "Purchased hardware", "Other"];
   return '<tr class="engineering-row" data-component-index="' + index + '"><td colspan="8"><details class="engineering-details"><summary>Manufacturing data — enter or verify engineering values</summary>' +
+    '<p class="engineering-guidance">Examples are prompts only, based on the earlier BOM format. Enter values from the current fixture drawing; do not copy an example unless it applies.</p>' +
     '<div class="engineering-grid">' + MANUFACTURING_FIELDS.map(([key, label, kind]) => {
       const value = component[key] ?? "";
-      if (key === "componentType") return '<label>' + label + '<select class="engineering-input" data-component-field="' + key + '">' + typeOptions.map(option => '<option value="' + esc(option) + '"' + (value === option ? ' selected' : '') + '>' + esc(option || 'Select type') + '</option>').join("") + '</select></label>';
-      return '<label>' + label + '<input class="engineering-input" type="text" data-component-field="' + key + '" value="' + esc(value) + '" placeholder="Enter if applicable"></label>';
+      if (key === "componentType") return '<label>' + label + '<select class="engineering-input" data-component-field="' + key + '">' + typeOptions.map(option => '<option value="' + esc(option) + '"' + (value === option ? ' selected' : '') + '>' + esc(option || 'Select type') + '</option>').join("") + '</select><small class="field-example">' + esc(engineeringExample(key, component)) + '</small></label>';
+      return '<label>' + label + '<input class="engineering-input" type="text" data-component-field="' + key + '" value="' + esc(value) + '" placeholder="' + esc(engineeringExample(key, component)) + '"><small class="field-example">' + esc(engineeringExample(key, component)) + '</small></label>';
     }).join("") + '</div>' +
     '<div class="engineering-actions"><button type="button" class="secondary" data-generate-description="' + index + '">Build BOM description from these fields</button><span>Only entered values are used; confirm the description before release.</span></div>' +
     '</details></td></tr>';
