@@ -5,10 +5,10 @@ A Node.js web application for preparing fixture BOMs from SolidWorks BOM exports
 ## Current workflow
 1. Enter project details.
 2. Select a fixture from the project schedule.
-3. Import the original SolidWorks BOM Excel file (.xlsx).
+3. Import the original SolidWorks BOM as either legacy Excel .xls or modern .xlsx.
 4. Paste the corresponding DXF filenames and parse them.
 5. Review automatic matches, select unmatched DXF files manually, and enter final manufacturing descriptions.
-6. Generate the fixture BOM in the agreed Excel layout.
+6. Generate the fixture BOM in the agreed Excel layout (.xlsx).
 
 ## BOM data sources
 - SolidWorks BOM is the source for item number, part number and quantity per fixture.
@@ -30,17 +30,22 @@ A Node.js web application for preparing fixture BOMs from SolidWorks BOM exports
 - npm
 
 ## Run locally
-\`\`\`bash
+```bash
 npm install
 npm run dev
-\`\`\`
+```
 
 Open http://localhost:3001.
 
 The application uses port 3001 by default to keep it separate from the SCADA API on port 3000.
 
+## SolidWorks BOM file compatibility
+- Import supports both legacy Excel .xls and modern Excel .xlsx files.
+- The importer looks for Part Number and Qty headers. Item No. and Description are optional.
+- The application reads the workbook in memory; it does not modify the original file.
+- The exported manufacturing BOM remains .xlsx.
+
 ## Current limitations
 - Project and fixture data are held in browser memory and are not yet saved to PostgreSQL.
-- The current BOM importer supports SolidWorks .xlsx files with headers for Part Number and Qty; Item No. and Description are optional.
 - DXF matching requires engineering review, especially for shared-part naming differences.
 - The exported BOM is a draft and requires engineering approval before production use.
