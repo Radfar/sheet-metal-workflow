@@ -3,3 +3,6 @@ node_modules/
 .DS_Store
 *.log
 coverage/
+
+# Runtime branding assets (do not commit uploaded customer/company images)
+data/

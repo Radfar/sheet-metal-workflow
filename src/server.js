@@ -1,6 +1,7 @@
 import express from "express";
 import path from "node:path";
 import crypto from "node:crypto";
+import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
@@ -26,7 +27,7 @@ if (AUTH_ENABLED && AUTH_SECRET.length < 32) {
 }
 
 app.set("trust proxy", 1);
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({ limit: "8mb" }));
 
 function safeEqual(a, b) {
   const left = Buffer.from(String(a));
@@ -113,7 +114,7 @@ app.post("/api/logout", (_req, res) => {
 app.get("/api/health", (_req, res) => res.json({
   status: "ok",
   application: "Sheet Metal Workflow",
-  version: "0.4.0"
+  version: "0.5.0"
 }));
 
 if (AUTH_ENABLED) {
@@ -123,6 +124,61 @@ if (AUTH_ENABLED) {
     return res.redirect("/login");
   });
 }
+
+
+const DATA_DIR = path.join(__dirname, "../data");
+const TEMPLATE_ASSETS_FILE = path.join(DATA_DIR, "template-assets.json");
+const TEMPLATE_ASSET_KEYS = new Set(["stellarLogo", "radioButton"]);
+
+async function readTemplateAssets() {
+  try {
+    return JSON.parse(await fs.readFile(TEMPLATE_ASSETS_FILE, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return {};
+    throw error;
+  }
+}
+
+function validateImageDataUrl(dataUrl) {
+  const match = /^data:image\\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ""));
+  if (!match) throw new Error("Image must be a PNG or JPEG file.");
+  const bytes = Buffer.from(match[2], "base64");
+  if (!bytes.length || bytes.length > 2 * 1024 * 1024) {
+    throw new Error("Each branding image must be no larger than 2 MB.");
+  }
+  return { dataUrl: String(dataUrl), extension: match[1] === "jpeg" ? "jpeg" : "png" };
+}
+
+app.get("/api/template-assets", async (_req, res) => {
+  try {
+    const assets = await readTemplateAssets();
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      stellarLogo: assets.stellarLogo?.dataUrl || "",
+      radioButton: assets.radioButton?.dataUrl || ""
+    });
+  } catch (error) {
+    console.error("Template asset read failed:", error);
+    res.status(500).json({ error: "Could not load saved BOM branding images." });
+  }
+});
+
+app.put("/api/template-assets/:assetName", async (req, res) => {
+  try {
+    const assetName = req.params.assetName;
+    if (!TEMPLATE_ASSET_KEYS.has(assetName)) {
+      return res.status(404).json({ error: "Unknown template image." });
+    }
+    const validated = validateImageDataUrl(req.body?.dataUrl);
+    const assets = await readTemplateAssets();
+    assets[assetName] = validated;
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(TEMPLATE_ASSETS_FILE, JSON.stringify(assets, null, 2), "utf8");
+    res.json({ success: true, assetName });
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Could not save this image." });
+  }
+});
 
 app.use(express.static(path.join(__dirname, "../public")));
 
@@ -243,7 +299,6 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       fixtureDescription = "",
       finish = "",
       bomFilenameDescription = "",
-      logoDataUrl = "",
       components = []
     } = req.body ?? {};
 
@@ -251,6 +306,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       return res.status(400).json({ error: "No BOM components to export." });
     }
 
+    const templateAssets = await readTemplateAssets();
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "Sheet Metal Workflow";
     workbook.created = new Date();
@@ -260,11 +316,15 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
 
     for (let pageStart = 0, page = 1; pageStart < components.length; pageStart += BOM_ROWS_PER_SHEET, page++) {
       const worksheet = workbook.addWorksheet(page === 1 ? "BOM" : "BOM " + page);
-      if (logoDataUrl) {
-        const match = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(logoDataUrl);
-        if (!match) throw new Error("Logo must be a PNG or JPEG image.");
-        const imageId = workbook.addImage({ base64: logoDataUrl, extension: match[1] === "jpeg" ? "jpeg" : "png" });
-        worksheet.addImage(imageId, { tl: { col: 0, row: 0 }, br: { col: 4, row: 7 }, editAs: "oneCell" });
+      for (const [assetName, position] of [
+        ["stellarLogo", { tl: { col: 0, row: 0 }, br: { col: 4, row: 7 }, editAs: "oneCell" }],
+        ["radioButton", { tl: { col: 6, row: 0 }, br: { col: 11, row: 7 }, editAs: "oneCell" }]
+      ]) {
+        const asset = templateAssets[assetName];
+        if (!asset?.dataUrl || !asset?.extension) continue;
+        const base64 = asset.dataUrl.split(",")[1];
+        const imageId = workbook.addImage({ base64, extension: asset.extension });
+        worksheet.addImage(imageId, position);
       }
       worksheet.columns = [
         { key: "item", width: 7 },
@@ -329,7 +389,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
             bottom: { style: "thin" }, right: { style: "thin" }
           };
         }
-        worksheet.getRow(rowNumber).height = 33;
+        worksheet.getRow(rowNumber).height = 24.75;
       }
 
       for (const address of ["B8", "E8", "H8", "B9", "E9", "H9", "B10", "B11"]) {
@@ -339,7 +399,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       for (const address of ["C8", "F8", "I8", "C9", "F9", "I9", "C10", "C11"]) {
         worksheet.getCell(address).alignment = { vertical: "middle", horizontal: "left", wrapText: true };
       }
-      for (let rowNumber = 8; rowNumber <= 11; rowNumber++) worksheet.getRow(rowNumber).height = 33;
+      for (let rowNumber = 8; rowNumber <= 42; rowNumber++) worksheet.getRow(rowNumber).height = 24.75;
 
       worksheet.getCell("A38").value = "Finish Date";
       worksheet.getCell("G38").value = "Shift Date";

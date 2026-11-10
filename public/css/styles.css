@@ -92,3 +92,6 @@ footer{text-align:center;color:#9aa4ad;font-size:10px;padding:18px}
 .engineering-grid label{align-self:start}
 
 .logo-upload-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px;padding:11px 12px;border:1px solid #e3e8ec;border-radius:6px;background:#fafbfc}.logo-upload-row label{font-size:11px;font-weight:700;color:#586674}.logo-upload-row .status-text{font-size:10px}
+
+/* Persistent BOM branding image upload controls */
+.logo-upload-row{margin-top:10px}

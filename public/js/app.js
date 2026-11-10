@@ -5,11 +5,8 @@ let bomLines = [];
 let dxfFiles = [];
 let currentFixtureTag = "";
 const fixtureData = {};
-const LOGO_STORAGE_KEY = "sheetMetalWorkflow.stellarLogoDataUrl";
+let templateAssets = { stellarLogo: "", radioButton: "" };
 
-function getSavedLogo() {
-  try { return localStorage.getItem(LOGO_STORAGE_KEY) || ""; } catch { return ""; }
-}
 
 function makeBomFilename() {
   const clean = value => String(value || "").replace(/[<>:"/\\|?*\x00-\x1F]/g, "").replace(/\s+/g, " ").trim();
@@ -354,43 +351,81 @@ function loadFixture(tag) {
 
 $("bomFilenameDescription").addEventListener("input", saveCurrentFixture);
 
-const logoInput = $("logoFile");
-if (getSavedLogo()) {
-  $("logoStatus").textContent = "Stellar logo is saved in this browser and will be included in BOM exports.";
-  $("logoStatus").className = "ok";
+async function loadTemplateAssets() {
+  try {
+    const response = await fetch("/api/template-assets");
+    if (!response.ok) throw new Error("Could not load saved images.");
+    templateAssets = await response.json();
+    updateBrandingStatus("stellarLogo", "Stellar logo");
+    updateBrandingStatus("radioButton", "Radio-button graphic");
+  } catch (error) {
+    ["stellarLogo", "radioButton"].forEach(key => {
+      const status = $(key + "Status");
+      status.textContent = "Could not load saved image settings from the server.";
+      status.className = "error";
+    });
+  }
 }
-logoInput.addEventListener("change", () => {
-  const file = logoInput.files[0];
-  if (!file) return;
-  if (!/^image\/(png|jpeg)$/.test(file.type)) {
-    $("logoStatus").textContent = "Unsupported image. Please choose a PNG or JPEG file.";
-    $("logoStatus").className = "error";
-    logoInput.value = "";
-    return;
+
+function updateBrandingStatus(assetName, label) {
+  const status = $(assetName + "Status");
+  if (templateAssets[assetName]) {
+    status.textContent = label + " is saved on the application server and will be included in every BOM.";
+    status.className = "ok";
+  } else {
+    status.textContent = "No " + label.toLowerCase() + " saved yet. Upload it once for all BOM exports.";
+    status.className = "status-text";
   }
-  if (file.size > 2 * 1024 * 1024) {
-    $("logoStatus").textContent = "Logo is too large. Please use an image smaller than 2 MB.";
-    $("logoStatus").className = "error";
-    logoInput.value = "";
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      localStorage.setItem(LOGO_STORAGE_KEY, String(reader.result));
-      $("logoStatus").textContent = "Stellar logo saved in this browser. It will be included in every exported fixture BOM.";
-      $("logoStatus").className = "ok";
-    } catch {
-      $("logoStatus").textContent = "Could not save the logo in browser storage. Try a smaller image.";
-      $("logoStatus").className = "error";
+}
+
+function bindBrandingUpload(assetName, label) {
+  const input = $(assetName + "File");
+  input.addEventListener("change", async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const status = $(assetName + "Status");
+    if (!/^image\\/(png|jpeg)$/.test(file.type)) {
+      status.textContent = "Unsupported image. Please choose a PNG or JPEG file.";
+      status.className = "error";
+      input.value = "";
+      return;
     }
-  };
-  reader.onerror = () => {
-    $("logoStatus").textContent = "Could not read this image file.";
-    $("logoStatus").className = "error";
-  };
-  reader.readAsDataURL(file);
-});
+    if (file.size > 2 * 1024 * 1024) {
+      status.textContent = label + " is too large. Maximum size is 2 MB.";
+      status.className = "error";
+      input.value = "";
+      return;
+    }
+    status.textContent = "Saving " + label.toLowerCase() + " on the application server…";
+    status.className = "status-text";
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("Could not read this image file."));
+        reader.readAsDataURL(file);
+      });
+      const response = await fetch("/api/template-assets/" + assetName, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataUrl })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not save this image.");
+      templateAssets[assetName] = dataUrl;
+      updateBrandingStatus(assetName, label);
+    } catch (error) {
+      status.textContent = error.message;
+      status.className = "error";
+    } finally {
+      input.value = "";
+    }
+  });
+}
+
+bindBrandingUpload("stellarLogo", "Stellar logo");
+bindBrandingUpload("radioButton", "Radio-button graphic");
+loadTemplateAssets();
 
 $("fixtureSelect").addEventListener("change", () => {
   $("scheduleStatus").textContent = "Click Load fixture to switch to " + $("fixtureSelect").value + ".";
@@ -626,7 +661,6 @@ $("exportBtn").addEventListener("click", async () => {
       fixtureDescription:$("fixtureDescription").value,
       finish:[$("finish").value, $("finishDescription").value].filter(Boolean).join(" = "),
       bomFilenameDescription:$("bomFilenameDescription").value,
-      logoDataUrl:getSavedLogo(),
       components:components.map(component => ({
         itemNo:component.itemNo,
         partNumber:component.partNumber,

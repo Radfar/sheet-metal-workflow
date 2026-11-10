@@ -31,9 +31,14 @@
       <label class="wide">Schedule reference<input id="scheduleReference" value="20260828_2605 Menlo Park_IFT Architectural"></label>
     </div>
     <div class="logo-upload-row">
-      <label for="logoFile">Stellar logo (upload once; retained in this browser)</label>
-      <input id="logoFile" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg">
-      <span id="logoStatus" class="status-text">No logo saved. Upload a PNG or JPEG to include it in exported BOMs.</span>
+      <label for="stellarLogoFile">Stellar logo (upload once; saved on this application)</label>
+      <input id="stellarLogoFile" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg">
+      <span id="stellarLogoStatus" class="status-text">Loading saved logo status…</span>
+    </div>
+    <div class="logo-upload-row">
+      <label for="radioButtonFile">Radio-button graphic (upload once; saved on this application)</label>
+      <input id="radioButtonFile" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg">
+      <span id="radioButtonStatus" class="status-text">Loading saved image status…</span>
     </div>
 
     <div class="fixture-picker">
@@ -123,7 +128,7 @@
     </div>
   </section>
 
-  <footer>V0.4.0 · Draft engineering data only · Manufacturing descriptions require engineering review</footer>
+  <footer>V0.5.0 · Draft engineering data only · Manufacturing descriptions require engineering review</footer>
 </main>
 <script src="/js/app.js"></script>
 </body>
