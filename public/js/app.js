@@ -106,6 +106,21 @@ function makeDraftDescription(partNumber, dxf) {
     .filter(Boolean).join(" — ");
 }
 
+
+const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
+
+function renderManufacturingFields(component, index) {
+  const typeOptions = ["", "Channel", "Angle", "Plate", "Gusset", "Purchased hardware", "Other"];
+  return '<tr class="engineering-row"><td colspan="8"><details class="engineering-details"><summary>Manufacturing data — enter or verify engineering values</summary>' +
+    '<div class="engineering-grid">' + MANUFACTURING_FIELDS.map(([key, label, kind]) => {
+      const value = component[key] ?? "";
+      if (key === "componentType") return '<label>' + label + '<select class="engineering-input" data-component-field="' + key + '">' + typeOptions.map(option => '<option value="' + esc(option) + '"' + (value === option ? ' selected' : '') + '>' + esc(option || 'Select type') + '</option>').join("") + '</select></label>';
+      return '<label>' + label + '<input class="engineering-input" type="text" data-component-field="' + key + '" value="' + esc(value) + '" placeholder="Enter if applicable"></label>';
+    }).join("") + '</div>' +
+    '<div class="engineering-actions"><button type="button" class="secondary" data-generate-description="' + index + '">Build BOM description from these fields</button><span>Only entered values are used; confirm the description before release.</span></div>' +
+    '</details></td></tr>';
+}
+
 function rebuildComponents() {
   components = bomLines.map(line => {
     const dxfIndex = matchDxfIndex(line.partNumber, dxfFiles, currentFixtureTag);
@@ -122,6 +137,7 @@ function rebuildComponents() {
     }
 
     return {
+      ...clone(line),
       itemNo: line.itemNo,
       partNumber: line.partNumber,
       quantityPerAssembly: line.quantityPerAssembly,
@@ -226,7 +242,7 @@ function renderComponents() {
       '<td><input class="cell description-cell" data-component-field="description" value="' + esc(component.description) + '" placeholder="Enter / confirm manufacturing description">' +
         (component.descriptionDraft ? '<span class="match-note">Auto-draft from DXF filename — verify and edit before release.</span>' : '') + '</td>' +
       '<td><button class="remove" data-remove-component="' + index + '" type="button">×</button></td>' +
-      '</tr>';
+      '</tr>' + renderManufacturingFields(component, index);
   }).join("");
 
   body.querySelectorAll("[data-dxf-select]").forEach(select => {
@@ -381,6 +397,12 @@ $("componentRows").addEventListener("change", event => {
   if (!select) return;
   const index = Number(select.closest("tr").dataset.componentIndex);
   components[index].dxfIndex = select.value === "" ? "" : Number(select.value);
+  if (components[index].dxfIndex !== "") {
+    const selectedDxf = dxfFiles[components[index].dxfIndex];
+    if (!components[index].flatPatternWidth) components[index].flatPatternWidth = selectedDxf.flatWidth || "";
+    if (!components[index].flatPatternHeight) components[index].flatPatternHeight = selectedDxf.flatHeight || "";
+    if (!components[index].materialCode) components[index].materialCode = selectedDxf.materialCode || "";
+  }
   if (!String(components[index].description || "").trim() && components[index].dxfIndex !== "") {
     const draft = makeDraftDescription(components[index].partNumber, dxfFiles[components[index].dxfIndex]);
     if (draft) {
@@ -416,6 +438,44 @@ $("componentRows").addEventListener("input", event => {
 });
 
 $("componentRows").addEventListener("click", event => {
+  const buildButton = event.target.closest("[data-generate-description]");
+  if (buildButton) {
+    const index = Number(buildButton.dataset.generateDescription);
+    const component = components[index];
+    const value = key => String(component[key] ?? "").trim();
+    const type = value("componentType");
+    const gauge = value("gauge");
+    const process = value("manufacturingProcess");
+    const partId = value("partIdentification") || value("partNumber");
+    let description = "";
+    if (type === "Channel") {
+      description = [value("crossSectionDimensions"), gauge, "Chn'l", value("overallLength") ? "x " + value("overallLength") : "", process ? "(" + process + ")" : "", partId ? '"' + partId + '"' : "", value("pieceCount") ? "(Made in " + value("pieceCount") + "pcs.)" : "", value("pieceLengths") ? "(" + value("pieceLengths") + ")" : ""].filter(Boolean).join(" ");
+    } else if (type === "Angle") {
+      description = [value("crossSectionDimensions"), gauge, "Angle", value("overallLength") ? "x " + value("overallLength") : "", process ? "(" + process + ")" : "", partId ? '"' + partId + '"' : "", value("pieceCount") ? "(Made in " + value("pieceCount") + "pcs.)" : "", value("pieceLengths") ? "(" + value("pieceLengths") + ")" : ""].filter(Boolean).join(" ");
+    } else if (type === "Plate") {
+      description = [value("plateLength"), value("plateWidth") ? "x " + value("plateWidth") : "", gauge, "Plt.", process ? "(" + process + ")" : "", partId ? '"' + partId + '"' : ""].filter(Boolean).join(" ");
+    } else if (type === "Gusset") {
+      description = [value("geometryDimensions"), gauge, value("profileType"), value("additionalDimensions") ? "x " + value("additionalDimensions") : "", "Return Gusset", process ? "(" + process + ")" : ""].filter(Boolean).join(" ");
+    } else if (type === "Purchased hardware") {
+      description = [value("hardwareSize"), value("hardwareType"), value("hardwareLength") ? "x " + value("hardwareLength") : ""].filter(Boolean).join(" ");
+    } else {
+      description = [value("geometryDimensions"), gauge, type, value("overallLength"), process, partId].filter(Boolean).join(" — ");
+    }
+    if (!description.trim()) {
+      $("parseStatus").textContent = "Enter applicable manufacturing fields before building the description.";
+      $("parseStatus").className = "error";
+      return;
+    }
+    component.description = description;
+    component.descriptionDraft = false;
+    const line = bomLines.find(entry => entry.itemNo === component.itemNo && entry.partNumber === component.partNumber);
+    if (line) { line.description = description; line.descriptionDraft = false; }
+    saveCurrentFixture();
+    renderComponents();
+    $("parseStatus").textContent = "Description built for " + (component.partNumber || "component") + ". Review it before export.";
+    $("parseStatus").className = "ok";
+    return;
+  }
   const button = event.target.closest("[data-remove-component]");
   if (!button) return;
   const index = Number(button.dataset.removeComponent);
