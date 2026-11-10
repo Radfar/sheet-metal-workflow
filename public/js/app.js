@@ -13,9 +13,13 @@ function getSavedLogo() {
 
 function makeBomFilename() {
   const clean = value => String(value || "").replace(/[<>:"/\\|?*\x00-\x1F]/g, "").replace(/\s+/g, " ").trim();
+  const selected = schedule.find(item => item.tag === $("fixtureTag").value);
   const po = clean($("poNumber").value) || "TBD";
-  const description = clean($("bomFilenameDescription").value) || clean($("fixtureTag").value) || "Fixture BOM";
-  return "BOM - PO " + po + " - " + description + ".xlsx";
+  const scheduleRow = selected ? selected.no : "";
+  const tag = clean($("fixtureTag").value) || "Fixture";
+  const description = clean($("bomFilenameDescription").value);
+  return "BOM - PO " + po + (scheduleRow ? "(" + scheduleRow + ")" : "") + " - " +
+    tag + (description ? " " + description : "") + ".xlsx";
 }
 
 const schedule = [
