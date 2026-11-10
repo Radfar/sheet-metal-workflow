@@ -111,7 +111,7 @@ const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["mate
 
 function renderManufacturingFields(component, index) {
   const typeOptions = ["", "Channel", "Angle", "Plate", "Gusset", "Purchased hardware", "Other"];
-  return '<tr class="engineering-row"><td colspan="8"><details class="engineering-details"><summary>Manufacturing data — enter or verify engineering values</summary>' +
+  return '<tr class="engineering-row" data-component-index="' + index + '"><td colspan="8"><details class="engineering-details"><summary>Manufacturing data — enter or verify engineering values</summary>' +
     '<div class="engineering-grid">' + MANUFACTURING_FIELDS.map(([key, label, kind]) => {
       const value = component[key] ?? "";
       if (key === "componentType") return '<label>' + label + '<select class="engineering-input" data-component-field="' + key + '">' + typeOptions.map(option => '<option value="' + esc(option) + '"' + (value === option ? ' selected' : '') + '>' + esc(option || 'Select type') + '</option>').join("") + '</select></label>';
