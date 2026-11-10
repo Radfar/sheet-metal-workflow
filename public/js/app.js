@@ -75,15 +75,62 @@ function matchDxfIndex(partNumber, files, fixtureTag) {
   return bestScore >= 60 ? bestIndex : "";
 }
 
+function makeDraftDescription(partNumber, dxf) {
+  if (!dxf) return "";
+  const label = String(dxf.componentLabel || partNumber || "").toUpperCase();
+  let componentType = "";
+
+  if (/SHORT[\\s_-]*ANG/.test(label) || /SHORT[\\s_-]*ANG/.test(String(partNumber).toUpperCase())) {
+    componentType = "Short angle";
+  } else if (/\\bANG(?:LE)?\\b/.test(label) || /\\bANG(?:LE)?\\b/.test(String(partNumber).toUpperCase())) {
+    componentType = "Angle";
+  } else if (/TROUGH/.test(label)) {
+    componentType = "Trough section";
+  } else if (/END[\\s_-]*CAP/.test(label) || /END[\\s_-]*CAP/.test(String(partNumber).toUpperCase())) {
+    componentType = "End cap";
+  } else if (/GUS/.test(label) || /GUSSET/.test(String(partNumber).toUpperCase())) {
+    componentType = "Gusset";
+  } else if (/SPLICE[\\s_-]*PLT/.test(label) || /SPLICE[\\s_-]*PLT/.test(String(partNumber).toUpperCase())) {
+    componentType = "Splice plate";
+  } else {
+    componentType = label.replace(/[_-]+/g, " ").replace(/\\s+/g, " ").trim();
+  }
+
+  if (!componentType) return "";
+  const part = String(partNumber || "").trim();
+  const dimensions = dxf.flatWidth && dxf.flatHeight
+    ? "Flat pattern " + dxf.flatWidth + " × " + dxf.flatHeight + " in"
+    : "";
+  const material = dxf.materialCode ? "Material code " + dxf.materialCode : "";
+  return [componentType + (part ? " " + part : ""), dimensions, material]
+    .filter(Boolean).join(" — ");
+}
+
 function rebuildComponents() {
-  components = bomLines.map(line => ({
-    itemNo: line.itemNo,
-    partNumber: line.partNumber,
-    quantityPerAssembly: line.quantityPerAssembly,
-    description: line.description || "",
-    dxfIndex: matchDxfIndex(line.partNumber, dxfFiles, currentFixtureTag),
-    manual: Boolean(line.manual)
-  }));
+  components = bomLines.map(line => {
+    const dxfIndex = matchDxfIndex(line.partNumber, dxfFiles, currentFixtureTag);
+    let description = String(line.description || "").trim();
+    let descriptionDraft = Boolean(line.descriptionDraft);
+
+    if (!description && dxfIndex !== "") {
+      description = makeDraftDescription(line.partNumber, dxfFiles[Number(dxfIndex)]);
+      descriptionDraft = Boolean(description);
+      if (descriptionDraft) {
+        line.description = description;
+        line.descriptionDraft = true;
+      }
+    }
+
+    return {
+      itemNo: line.itemNo,
+      partNumber: line.partNumber,
+      quantityPerAssembly: line.quantityPerAssembly,
+      description,
+      descriptionDraft,
+      dxfIndex,
+      manual: Boolean(line.manual)
+    };
+  });
   render();
 }
 
@@ -176,7 +223,8 @@ function renderComponents() {
       '<td><input class="cell qty-cell" type="number" min="0" step="any" data-component-field="quantityPerAssembly" value="' + esc(component.quantityPerAssembly) + '" ' + (component.manual ? "" : "readonly") + '></td>' +
       '<td><select class="match-select" data-dxf-select>' + options + '</select>' + matchWarning + '</td>' +
       '<td>' + material + '</td><td>' + flatSize + '</td>' +
-      '<td><input class="cell description-cell" data-component-field="description" value="' + esc(component.description) + '" placeholder="Enter / confirm manufacturing description"></td>' +
+      '<td><input class="cell description-cell" data-component-field="description" value="' + esc(component.description) + '" placeholder="Enter / confirm manufacturing description">' +
+        (component.descriptionDraft ? '<span class="match-note">Auto-draft from DXF filename — verify and edit before release.</span>' : '') + '</td>' +
       '<td><button class="remove" data-remove-component="' + index + '" type="button">×</button></td>' +
       '</tr>';
   }).join("");
@@ -333,6 +381,18 @@ $("componentRows").addEventListener("change", event => {
   if (!select) return;
   const index = Number(select.closest("tr").dataset.componentIndex);
   components[index].dxfIndex = select.value === "" ? "" : Number(select.value);
+  if (!String(components[index].description || "").trim() && components[index].dxfIndex !== "") {
+    const draft = makeDraftDescription(components[index].partNumber, dxfFiles[components[index].dxfIndex]);
+    if (draft) {
+      components[index].description = draft;
+      components[index].descriptionDraft = true;
+      const line = bomLines.find(entry => entry.itemNo === components[index].itemNo && entry.partNumber === components[index].partNumber);
+      if (line) {
+        line.description = draft;
+        line.descriptionDraft = true;
+      }
+    }
+  }
   saveCurrentFixture();
   renderComponents();
 });
@@ -342,9 +402,15 @@ $("componentRows").addEventListener("input", event => {
   if (!input) return;
   const index = Number(input.closest("tr").dataset.componentIndex);
   components[index][input.dataset.componentField] = input.value;
-  if (components[index].manual) {
-    const line = bomLines.find(entry => entry.itemNo === components[index].itemNo);
-    if (line) line[input.dataset.componentField] = input.value;
+  if (input.dataset.componentField === "description") {
+    components[index].descriptionDraft = false;
+  }
+  const line = bomLines.find(entry =>
+    entry.itemNo === components[index].itemNo && entry.partNumber === components[index].partNumber
+  );
+  if (line) {
+    line[input.dataset.componentField] = input.value;
+    if (input.dataset.componentField === "description") line.descriptionDraft = false;
   }
   saveCurrentFixture();
 });
