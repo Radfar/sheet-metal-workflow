@@ -12,7 +12,7 @@ function getSavedLogo() {
 }
 
 function makeBomFilename() {
-  const clean = value => String(value || "").replace(/[<>:"/\\\\|?*\\x00-\\x1F]/g, "").replace(/\\s+/g, " ").trim();
+  const clean = value => String(value || "").replace(/[<>:"/\\|?*\x00-\x1F]/g, "").replace(/\s+/g, " ").trim();
   const po = clean($("poNumber").value) || "TBD";
   const description = clean($("bomFilenameDescription").value) || clean($("fixtureTag").value) || "Fixture BOM";
   return "BOM - PO " + po + " - " + description + ".xlsx";
@@ -358,7 +358,7 @@ if (getSavedLogo()) {
 logoInput.addEventListener("change", () => {
   const file = logoInput.files[0];
   if (!file) return;
-  if (!/^image\\/(png|jpeg)$/.test(file.type)) {
+  if (!/^image\/(png|jpeg)$/.test(file.type)) {
     $("logoStatus").textContent = "Unsupported image. Please choose a PNG or JPEG file.";
     $("logoStatus").className = "error";
     logoInput.value = "";
