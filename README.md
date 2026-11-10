@@ -50,3 +50,11 @@ The application uses port 3001 by default to keep it separate from the SCADA API
 - Project and fixture data are held in browser memory and are not yet saved to PostgreSQL.
 - DXF matching requires engineering review, especially for shared-part naming differences.
 - The exported BOM is a draft and requires engineering approval before production use.
+
+
+## Structured manufacturing data entry (V0.3.0)
+Each BOM component has an expandable engineering-data form. It includes component type, material code and grade, thickness/gauge, cross-section and geometry dimensions, profile type, additional dimensions, overall finished length, plate dimensions, flat-pattern dimensions, manufacturing process, drawing part identification, fabrication piece count and piece lengths, hardware size/type/length, drawing reference, and manufacturing notes.
+
+The user can build a draft BOM description from the entered fields using the Channel, Angle, Plate, Gusset, or Purchased hardware template, then edit the resulting description manually. The application uses only values entered by the user; it does not infer missing engineering specifications. DXF flat-pattern dimensions and material-code tokens are copied into their corresponding editable fields when a DXF is selected and those fields are blank.
+
+**Data persistence:** this version still keeps project and fixture data in the current browser session only. Do not close or refresh the tab before exporting or sharing the results. PostgreSQL persistence is a later milestone.
