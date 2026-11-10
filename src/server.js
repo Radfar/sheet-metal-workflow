@@ -39,16 +39,13 @@ function sign(value) {
 
 function readSession(req) {
   if (!AUTH_ENABLED) return true;
-
   const cookieHeader = req.headers.cookie || "";
   const cookie = cookieHeader.split(";").map(part => part.trim())
     .find(part => part.startsWith(SESSION_COOKIE + "="));
   if (!cookie) return false;
-
   const token = decodeURIComponent(cookie.slice(SESSION_COOKIE.length + 1));
   const [payload, signature] = token.split(".");
   if (!payload || !signature || !safeEqual(sign(payload), signature)) return false;
-
   try {
     const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
     return session.username === AUTH_USERNAME && Number(session.exp) > Date.now();
@@ -86,25 +83,21 @@ app.get("/login", (req, res) => {
 
 app.post("/api/login", (req, res) => {
   if (!AUTH_ENABLED) return res.json({ success: true });
-
   const ip = req.ip || req.socket.remoteAddress || "unknown";
   const now = Date.now();
   const attempt = loginAttempts.get(ip);
   if (attempt && now < attempt.resetAt && attempt.count >= 10) {
     return res.status(429).json({ error: "Too many attempts. Please wait 15 minutes and try again." });
   }
-
   const username = String(req.body?.username || "");
   const password = String(req.body?.password || "");
   if (!safeEqual(username, AUTH_USERNAME) || !safeEqual(password, AUTH_PASSWORD)) {
     const current = attempt && now < attempt.resetAt
-      ? attempt
-      : { count: 0, resetAt: now + 15 * 60 * 1000 };
+      ? attempt : { count: 0, resetAt: now + 15 * 60 * 1000 };
     current.count += 1;
     loginAttempts.set(ip, current);
     return res.status(401).json({ error: "Incorrect username or password." });
   }
-
   loginAttempts.delete(ip);
   setSessionCookie(res, AUTH_USERNAME);
   res.setHeader("Cache-Control", "no-store");
@@ -116,20 +109,16 @@ app.post("/api/logout", (_req, res) => {
   res.json({ success: true });
 });
 
-app.get("/api/health", (_req, res) =>
-  res.json({
-    status: "ok",
-    application: "Sheet Metal Workflow",
-    version: "0.1.0"
-  })
-);
+app.get("/api/health", (_req, res) => res.json({
+  status: "ok",
+  application: "Sheet Metal Workflow",
+  version: "0.2.0"
+}));
 
 if (AUTH_ENABLED) {
   app.use((req, res, next) => {
     if (readSession(req)) return next();
-    if (req.path.startsWith("/api/")) {
-      return res.status(401).json({ error: "Authentication required." });
-    }
+    if (req.path.startsWith("/api/")) return res.status(401).json({ error: "Authentication required." });
     return res.redirect("/login");
   });
 }
@@ -138,15 +127,107 @@ app.use(express.static(path.join(__dirname, "../public")));
 
 app.post("/api/parse-dxf-list", (req, res) => {
   const { filenames } = req.body ?? {};
-
   if (typeof filenames !== "string" || !filenames.trim()) {
-    return res.status(400).json({
-      error: "Provide one DXF filename per line."
-    });
+    return res.status(400).json({ error: "Provide one DXF filename per line." });
   }
-
   res.json({ components: parseDxfList(filenames) });
 });
+
+function normalizeHeader(value) {
+  return String(value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]+/g, "");
+}
+
+function cellText(value) {
+  if (value == null) return "";
+  if (typeof value === "object" && value.text != null) return String(value.text).trim();
+  if (typeof value === "object" && value.richText) return value.richText.map(part => part.text).join("").trim();
+  return String(value).trim();
+}
+
+app.post(
+  "/api/import-solidworks-bom",
+  express.raw({
+    type: [
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/octet-stream"
+    ],
+    limit: "10mb"
+  }),
+  async (req, res) => {
+    try {
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        return res.status(400).json({ error: "Select a SolidWorks BOM .xlsx file." });
+      }
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(req.body);
+      let headerInfo = null;
+
+      for (const worksheet of workbook.worksheets) {
+        for (let rowNumber = 1; rowNumber <= Math.min(worksheet.rowCount, 40); rowNumber++) {
+          const row = worksheet.getRow(rowNumber);
+          const headers = {};
+          row.eachCell({ includeEmpty: false }, (cell, columnNumber) => {
+            const key = normalizeHeader(cellText(cell.value));
+            if (key) headers[key] = columnNumber;
+          });
+          const partColumn = headers.PARTNUMBER || headers.PARTNO || headers.PART;
+          const qtyColumn = headers.QTY || headers.QUANTITY;
+          if (partColumn && qtyColumn) {
+            headerInfo = {
+              worksheet,
+              headerRow: rowNumber,
+              partColumn,
+              qtyColumn,
+              itemColumn: headers.ITEMNO || headers.ITEM,
+              descriptionColumn: headers.DESCRIPTION || headers.DESC
+            };
+            break;
+          }
+        }
+        if (headerInfo) break;
+      }
+
+      if (!headerInfo) {
+        return res.status(422).json({
+          error: "Could not find the required SolidWorks columns: PART NUMBER and QTY."
+        });
+      }
+
+      const { worksheet, headerRow, partColumn, qtyColumn, itemColumn, descriptionColumn } = headerInfo;
+      const lines = [];
+      for (let rowNumber = headerRow + 1; rowNumber <= worksheet.rowCount; rowNumber++) {
+        const row = worksheet.getRow(rowNumber);
+        const partNumber = cellText(row.getCell(partColumn).value);
+        const rawQty = row.getCell(qtyColumn).value;
+        const quantityText = cellText(rawQty);
+        if (!partNumber && !quantityText) continue;
+        const quantity = Number(quantityText);
+        if (!partNumber) continue;
+        lines.push({
+          itemNo: itemColumn ? cellText(row.getCell(itemColumn).value) : String(lines.length + 1),
+          partNumber,
+          description: descriptionColumn ? cellText(row.getCell(descriptionColumn).value) : "",
+          quantityPerAssembly: Number.isFinite(quantity) ? quantity : ""
+        });
+      }
+
+      if (!lines.length) {
+        return res.status(422).json({ error: "The SolidWorks worksheet contains no component rows." });
+      }
+      const invalid = lines.filter(line => line.quantityPerAssembly === "" || line.quantityPerAssembly < 0);
+      if (invalid.length) {
+        return res.status(422).json({
+          error: "Some BOM rows have missing or invalid quantities: " +
+            invalid.map(line => line.partNumber).join(", ")
+        });
+      }
+      res.json({ components: lines, count: lines.length, worksheet: worksheet.name });
+    } catch (error) {
+      console.error("SolidWorks BOM import failed:", error);
+      res.status(400).json({ error: "Could not read this Excel file. Please use the original SolidWorks .xlsx export." });
+    }
+  }
+);
 
 app.post("/api/export-bom-xlsx", async (req, res) => {
   try {
@@ -171,30 +252,16 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
     workbook.created = new Date();
 
     const fixtureQty = Number(fixtureQuantity) || 0;
-    const exportDate = new Date();
-    const customerProject = [customer.trim(), projectName.trim()]
-      .filter(Boolean)
-      .join(" - ");
+    const customerProject = [customer.trim(), projectName.trim()].filter(Boolean).join(" - ");
 
-    for (
-      let pageStart = 0, page = 1;
-      pageStart < components.length;
-      pageStart += BOM_ROWS_PER_SHEET, page++
-    ) {
+    for (let pageStart = 0, page = 1; pageStart < components.length; pageStart += BOM_ROWS_PER_SHEET, page++) {
       const worksheet = workbook.addWorksheet(page === 1 ? "BOM" : "BOM " + page);
-
       worksheet.columns = [
         { key: "item", width: 7 },
         { key: "description", width: 14 },
-        { key: "c", width: 12 },
-        { key: "d", width: 12 },
-        { key: "e", width: 12 },
-        { key: "f", width: 12 },
-        { key: "g", width: 12 },
-        { key: "h", width: 12 },
-        { key: "i", width: 12 },
-        { key: "quantity", width: 12 },
-        { key: "total", width: 14 }
+        { key: "c", width: 12 }, { key: "d", width: 12 }, { key: "e", width: 12 },
+        { key: "f", width: 12 }, { key: "g", width: 12 }, { key: "h", width: 12 },
+        { key: "i", width: 12 }, { key: "quantity", width: 12 }, { key: "total", width: 14 }
       ];
 
       worksheet.getCell("B8").value = "CUSTOMER:";
@@ -202,8 +269,8 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       worksheet.getCell("E8").value = "PO #:";
       worksheet.getCell("F8").value = poNumber;
       worksheet.getCell("H8").value = "DATE:";
-      worksheet.getCell("I8").value = exportDate;
-      worksheet.getCell("I8").numFmt = "mm/dd/yyyy";
+      worksheet.getCell("I8").value = new Date();
+      worksheet.getCell("I8").numFmt = "mmmm d, yyyy";
 
       worksheet.getCell("B9").value = "UNIT:";
       worksheet.getCell("C9").value = fixtureTag;
@@ -215,7 +282,6 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       worksheet.getCell("B10").value = "FIXTURE:";
       worksheet.mergeCells("C10:K10");
       worksheet.getCell("C10").value = fixtureDescription;
-
       worksheet.getCell("B11").value = "FINISH:";
       worksheet.mergeCells("C11:K11");
       worksheet.getCell("C11").value = finish;
@@ -224,20 +290,17 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
         const component = components[pageStart + i];
         const rowNumber = 12 + i;
         const quantity = Number(component?.quantityPerAssembly);
-        const validQuantity = Number.isFinite(quantity) && quantity >= 0;
-        const description =
-          component?.description?.trim() ||
-          component?.componentLabel?.trim() ||
-          component?.originalFilename?.trim() ||
-          "";
+        const validQuantity = Number.isFinite(quantity) && quantity >= 0 &&
+          component?.quantityPerAssembly !== "";
+        const description = component?.description?.trim() || "";
 
         worksheet.mergeCells("B" + rowNumber + ":I" + rowNumber);
-        worksheet.getCell("A" + rowNumber).value = component ? pageStart + i + 1 : "";
+        worksheet.getCell("A" + rowNumber).value = component
+          ? (component.itemNo || String(pageStart + i + 1)) : "";
         worksheet.getCell("B" + rowNumber).value = component ? description : "";
-        worksheet.getCell("J" + rowNumber).value =
-          component && validQuantity && component.quantityPerAssembly !== "" ? quantity : "";
+        worksheet.getCell("J" + rowNumber).value = component && validQuantity ? quantity : "";
 
-        if (component && fixtureQty > 0 && validQuantity && component.quantityPerAssembly !== "") {
+        if (component && fixtureQty > 0 && validQuantity) {
           worksheet.getCell("K" + rowNumber).value = {
             formula: 'IF(OR(J' + rowNumber + '="", $I$9=""), "", J' + rowNumber + '*$I$9)',
             result: quantity * fixtureQty
@@ -247,37 +310,32 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
         }
 
         worksheet.getCell("A" + rowNumber).alignment = { horizontal: "center", vertical: "middle" };
-        worksheet.getCell("B" + rowNumber).alignment = { vertical: "top", wrapText: true };
+        worksheet.getCell("B" + rowNumber).alignment = { vertical: "middle", wrapText: true };
         worksheet.getCell("J" + rowNumber).alignment = { horizontal: "center", vertical: "middle" };
         worksheet.getCell("K" + rowNumber).alignment = { horizontal: "center", vertical: "middle" };
-
         for (const col of ["A", "B", "J", "K"]) {
           worksheet.getCell(col + rowNumber).border = {
             top: { style: "thin" }, left: { style: "thin" },
             bottom: { style: "thin" }, right: { style: "thin" }
           };
         }
-        worksheet.getRow(rowNumber).height = 24;
+        worksheet.getRow(rowNumber).height = 27;
       }
 
-      for (const cellAddress of ["B8", "E8", "H8", "B9", "E9", "H9", "B10", "B11"]) {
-        worksheet.getCell(cellAddress).font = { bold: true };
-        worksheet.getCell(cellAddress).alignment = { vertical: "middle", horizontal: "left" };
+      for (const address of ["B8", "E8", "H8", "B9", "E9", "H9", "B10", "B11"]) {
+        worksheet.getCell(address).font = { bold: true };
+        worksheet.getCell(address).alignment = { vertical: "middle", horizontal: "left" };
       }
-
-      for (const cellAddress of ["C8", "F8", "I8", "C9", "F9", "I9", "C10", "C11"]) {
-        worksheet.getCell(cellAddress).alignment = {
-          vertical: "middle", horizontal: "left", wrapText: true
-        };
+      for (const address of ["C8", "F8", "I8", "C9", "F9", "I9", "C10", "C11"]) {
+        worksheet.getCell(address).alignment = { vertical: "middle", horizontal: "left", wrapText: true };
       }
-
-      for (const rowNumber of [8, 9, 10, 11]) {
-        worksheet.getRow(rowNumber).height = rowNumber >= 10 ? 30 : 22;
-      }
+      for (const rowNumber of [8, 9, 10, 11]) worksheet.getRow(rowNumber).height = rowNumber >= 10 ? 30 : 22;
 
       worksheet.pageSetup = {
-        orientation: "landscape", fitToPage: true,
-        fitToWidth: 1, fitToHeight: 1,
+        orientation: "landscape",
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 1,
         paperSize: worksheet.PAPERSIZE_LETTER
       };
       worksheet.pageSetup.printArea = "A1:K36";
@@ -288,18 +346,13 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
     const safeFixture = String(fixtureTag || "BOM").replace(/[^a-z0-9_-]+/gi, "_");
     const safeProject = String(projectNumber || projectName || "project").replace(/[^a-z0-9_-]+/gi, "_");
     const filename = "BOM - " + safeProject + " - " + safeFixture + ".xlsx";
-
-    res.setHeader("Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="' + filename + '"');
-
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) {
     console.error("BOM XLSX export failed:", error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Could not generate the Excel BOM." });
-    }
+    if (!res.headersSent) res.status(500).json({ error: "Could not generate the Excel BOM." });
   }
 });
 
