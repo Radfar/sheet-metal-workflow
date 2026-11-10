@@ -363,7 +363,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       worksheet.views = [{ state: "normal" }];
     }
 
-    const safeSegment = value => String(value || "").replace(/[<>:"/\\\\|?*\\x00-\\x1F]/g, "").replace(/\\s+/g, " ").trim();
+    const safeSegment = value => String(value || "").replace(/[<>:"/\\|?*\x00-\x1F]/g, "").replace(/\s+/g, " ").trim();
     const safePo = safeSegment(poNumber) || "TBD";
     const safeDescription = safeSegment(bomFilenameDescription) || safeSegment(fixtureTag) || "Fixture BOM";
     const filename = "BOM - PO " + safePo + " - " + safeDescription + ".xlsx";
