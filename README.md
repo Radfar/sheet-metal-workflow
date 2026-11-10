@@ -64,10 +64,11 @@ The user can build a draft BOM description from the entered fields using the Cha
 The manufacturing-data editor displays field-level examples drawn from the previously supplied BOM patterns (channel, angle, plate and return gusset). Examples are prompts only, not data for the current fixture. The component type field also displays a part-number-based suggestion that the user must confirm. Users must enter values from the current drawing and verify all material, gauge, dimensions and processes before generating the description.
 
 
-## Excel BOM output template (V0.4.0)
+## Excel BOM output template (V0.5.0)
 - The project PO number is shared across all fixture BOMs in the project.
 - Exported filenames follow `BOM - PO {PO Number} - {Fixture Description}.xlsx`. Each fixture has an editable BOM filename description; an empty PO is shown as `TBD`.
-- Upload the Stellar logo once as a PNG or JPEG (maximum 2 MB). It is retained in the current browser local storage and embedded in cells A1:D7 on each exported worksheet. The logo is browser-specific and is not uploaded to a server until an export is generated.
-- Rows 8 through 36 have a fixed height of 33 points.
+- Upload the Stellar logo and radio-button graphic once as PNG or JPEG images (maximum 2 MB each). They are saved on the application server and automatically embedded in A1:D7 and G1:K7, respectively, on every exported worksheet. They do not need to be uploaded for each BOM.
+- Rows 8 through 42 have a fixed height of 33 pixels (24.75 points in Excel row-height units). Rows 1 through 7 retain their image-area layout.
 - Footer labels are written at A38 (Finish Date), G38 (Shift Date), K38 (Track Number #1), A39 (Note), A42 (Cut By), and H42 (Cut Date). The print area is A1:K42.
-- The logo and footer are repeated on each worksheet when a BOM spans multiple sheets.
+- Both branding images and the footer are repeated on each worksheet when a BOM spans multiple sheets.
+- Branding images are stored in the local `data/template-assets.json` file at runtime; keep this data directory persistent when deploying or moving the application.
