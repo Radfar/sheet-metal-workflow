@@ -28,11 +28,11 @@ export async function buildCuttingListWorkbook(payload = {}) {
       const thickness = clean(component.gauge);
       const finish = clean(fixture.finish);
       // Exact DXF filename is the initial identity key. Similar names/dimensions are never merged.
-      const identity = [clean(dxf.originalFilename).toLowerCase(), material.toUpperCase(), thickness.toUpperCase(), finish.toUpperCase()].join("|");
+      const identity = [clean(dxf.consolidationKey || dxf.originalFilename).toLowerCase(), material.toUpperCase(), thickness.toUpperCase(), finish.toUpperCase()].join("|");
       const key = identity;
       if (!grouped.has(key)) {
         grouped.set(key, {
-          dxfFilename: clean(dxf.originalFilename),
+          dxfFilename: clean(dxf.outputFilename || dxf.originalFilename),
           material: material || clean(component.materialCode) || "",
           thickness,
           finish,
