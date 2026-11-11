@@ -94,20 +94,20 @@ function makeDraftDescription(partNumber, dxf) {
   const label = String(dxf.componentLabel || partNumber || "").toUpperCase();
   let componentType = "";
 
-  if (/SHORT[\\s_-]*ANG/.test(label) || /SHORT[\\s_-]*ANG/.test(String(partNumber).toUpperCase())) {
+  if (/SHORT[\s_-]*ANG/.test(label) || /SHORT[\s_-]*ANG/.test(String(partNumber).toUpperCase())) {
     componentType = "Short angle";
-  } else if (/\\bANG(?:LE)?\\b/.test(label) || /\\bANG(?:LE)?\\b/.test(String(partNumber).toUpperCase())) {
+  } else if (/\bANG(?:LE)?\b/.test(label) || /\bANG(?:LE)?\b/.test(String(partNumber).toUpperCase())) {
     componentType = "Angle";
   } else if (/TROUGH/.test(label)) {
     componentType = "Trough section";
-  } else if (/END[\\s_-]*CAP/.test(label) || /END[\\s_-]*CAP/.test(String(partNumber).toUpperCase())) {
+  } else if (/END[\s_-]*CAP/.test(label) || /END[\s_-]*CAP/.test(String(partNumber).toUpperCase())) {
     componentType = "End cap";
   } else if (/GUS/.test(label) || /GUSSET/.test(String(partNumber).toUpperCase())) {
     componentType = "Gusset";
-  } else if (/SPLICE[\\s_-]*PLT/.test(label) || /SPLICE[\\s_-]*PLT/.test(String(partNumber).toUpperCase())) {
+  } else if (/SPLICE[\s_-]*PLT/.test(label) || /SPLICE[\s_-]*PLT/.test(String(partNumber).toUpperCase())) {
     componentType = "Splice plate";
   } else {
-    componentType = label.replace(/[_-]+/g, " ").replace(/\\s+/g, " ").trim();
+    componentType = label.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   }
 
   if (!componentType) return "";
