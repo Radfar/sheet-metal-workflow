@@ -87,3 +87,20 @@ The branch `feature/pdf-drawing-extraction-test` adds a temporary browser-based 
 This is intentionally a test before adding PDF data into the main BOM workflow. It lets us determine whether the actual SolidWorks/CATIA drawing PDFs contain usable text-layer data.
 
 Scanned/image-only PDFs will require OCR in a later step.
+
+
+## Consolidated Laser Order Request (initial implementation)
+
+The project workspace includes a project-level Laser Order Request generator.
+
+- The generator reads fixture BOMs retained in the current browser session.
+- Required production quantity is calculated as SolidWorks BOM quantity per fixture multiplied by the fixture schedule quantity.
+- Components are consolidated by exact DXF filename by default, with material code, material/grade, thickness and optional component finish included in the identity.
+- If different fixture-specific DXF filenames are confirmed to represent the same approved common part, enter the same Approved common DXF identity / filename in each component's Manufacturing data. The entered identity becomes the consolidated output filename; original DXF filenames remain available in the fixture data.
+- Common DXFs identified by the parser as COMMON are placed in a COMMON PARTS section. Other lines are grouped by material and thickness.
+- BOM components without a matched DXF are excluded from the laser order; purchased hardware is not a laser-cutting line.
+- Material grade and gauge are not inferred from C11/C16. Enter verified values from the drawing or material specification. The material-code token is retained separately.
+- The FINISH column remains blank unless a component-level cutting-list finish is explicitly supplied.
+- Review the preview and exported workbook before releasing the order.
+
+Current limitation: project and fixture BOM data remain browser-session-only. The cutting list cannot yet retrieve BOMs from a previous session or another workstation. PostgreSQL persistence and import of a complete project folder are future milestones.
