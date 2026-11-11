@@ -204,39 +204,52 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
   function sectionHeadingText(section, payload) {
     const folderPrefix = section.key === "common"
-      ? section.title + " / laser_dxf\\"
-      : section.title + " / \\laser_dxf\\";
+      ? section.title + " / laser_dxf\\\\"
+      : section.title + " / \\\\laser_dxf\\\\";
     const folders = [
       clean(payload.customer),
       clean(payload.projectName),
       clean(payload.mountingComment),
       section.title
     ].filter(Boolean);
-    return folderPrefix + folders.join("\\");
+    return folderPrefix + folders.join("\\\\");
   }
 
-  // Clear old sample data while retaining all template cell formatting and merges.
+  // Reset the template's sample content and row visibility before writing this order.
   for (const section of Object.values(sectionRows)) {
+    ws.getRow(section.headingRow).hidden = false;
     ws.getCell(section.headingRow, 2).value = null;
     for (let row = section.firstRow; row <= section.lastRow; row++) {
+      ws.getRow(row).hidden = false;
       for (const column of [1, 2, 8, 9, 10, 11]) {
         ws.getCell(row, column).value = null;
       }
     }
   }
 
+  // Populate each material section, then hide unused template rows. Hidden rows
+  // consume no printed space, so the next section follows the last populated line.
   for (const section of sectionDefinitions) {
     const layout = sectionRows[section.key];
-    ws.getCell(layout.headingRow, 2).value = sectionHeadingText({ ...layout, key: section.key }, payload);
-
     const lines = groups[section.key];
     const capacity = layout.lastRow - layout.firstRow + 1;
+
     if (lines.length > capacity) {
       throw new Error(
         section.title + " contains " + lines.length + " lines, but the original LOR template supports " +
         capacity + ". The template layout must be extended before exporting this order."
       );
     }
+
+    if (lines.length === 0) {
+      ws.getRow(layout.headingRow).hidden = true;
+      for (let row = layout.firstRow; row <= layout.lastRow; row++) {
+        ws.getRow(row).hidden = true;
+      }
+      continue;
+    }
+
+    ws.getCell(layout.headingRow, 2).value = sectionHeadingText({ ...layout, key: section.key }, payload);
 
     lines.forEach((line, index) => {
       const row = layout.firstRow + index;
@@ -247,7 +260,16 @@ export async function buildCuttingListWorkbook(payload = {}) {
       ws.getCell(row, 10).value = line.quantity;
       ws.getCell(row, 11).value = line.finish;
     });
+
+    for (let row = layout.firstRow + lines.length; row <= layout.lastRow; row++) {
+      ws.getRow(row).hidden = true;
+    }
   }
+
+  // Retain one-page width while allowing the compacted report to use only the
+  // number of pages its populated rows require.
+  ws.pageSetup.fitToWidth = 1;
+  ws.pageSetup.fitToHeight = 0;
 
   const filenameOrder = safeFilename(payload.orderNumber) || "TBD";
   const dateRange = formatOrderShipRange(payload.orderDate, payload.shipDate);
