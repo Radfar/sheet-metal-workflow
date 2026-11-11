@@ -361,6 +361,8 @@ function loadFixture(tag) {
   $("dxfInput").value = saved?.dxfText || "";
   if ($("drawingTextPreview")) $("drawingTextPreview").value = drawingText;
   if ($("drawingTextDetails")) $("drawingTextDetails").hidden = !drawingText;
+  if ($("componentTreePanel")) $("componentTreePanel").hidden = true;
+  if ($("buildComponentTreeBtn")) $("buildComponentTreeBtn").disabled = !(bomLines.length && dxfFiles.length);
   $("bomStatus").textContent = bomLines.length
     ? bomLines.length + " SolidWorks BOM item(s) loaded for " + item.tag + "."
     : "No SolidWorks BOM imported for " + item.tag + ".";
@@ -859,6 +861,9 @@ $("exportBtn").addEventListener("click", async () => {
     $("parseStatus").textContent = "Excel BOM generated. " +
       (missing ? missing + " description(s) are blank; review the workbook before release." : "All manufacturing descriptions are populated.");
     $("parseStatus").className = missing ? "status-text" : "ok";
+    $("folderImportReview").textContent = currentFixtureTag + " BOM Excel file generated successfully." +
+      (missing ? " " + missing + " description(s) remain blank and need review." : "");
+    $("folderImportReview").className = missing ? "status-text" : "ok";
   } catch (error) {
     $("parseStatus").textContent = error.message;
     $("parseStatus").className = "error";
