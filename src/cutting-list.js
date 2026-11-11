@@ -18,6 +18,16 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
   const grouped = new Map();
   const skipped = [];
+  const hashFixtureMap = new Map();
+  for (const fixture of fixtures) {
+    for (const component of (Array.isArray(fixture.components) ? fixture.components : [])) {
+      const hash = component.dxf?.sha256;
+      if (!hash) continue;
+      if (!hashFixtureMap.has(hash)) hashFixtureMap.set(hash, new Set());
+      hashFixtureMap.get(hash).add(clean(fixture.fixtureTag));
+    }
+  }
+  const commonHashes = new Set([...hashFixtureMap.entries()].filter(([, tags]) => tags.size > 1).map(([hash]) => hash));
   for (const fixture of fixtures) {
     const fixtureTag = clean(fixture.fixtureTag);
     const fixtureQuantity = Number(fixture.fixtureQuantity);
@@ -35,8 +45,13 @@ export async function buildCuttingListWorkbook(payload = {}) {
       const material = clean(component.materialGrade);
       const thickness = clean(component.gauge);
       const finish = clean(component.cuttingListFinish);
-      // Exact DXF filename is the default identity. An explicit approved common identity may override it.
-      const identity = [clean(dxf.consolidationKey || dxf.originalFilename).toLowerCase(), clean(component.materialCode).toUpperCase(), material.toUpperCase(), thickness.toUpperCase(), finish.toUpperCase()].join("|");
+      // Byte-identical DXFs used by multiple selected fixtures are common parts; explicit approved identities remain supported.
+      const hashCommon = Boolean(dxf.sha256 && commonHashes.has(dxf.sha256));
+      const isCommon = Boolean(dxf.consolidationKey) || clean(dxf.fixtureTag).toUpperCase() === "COMMON" || hashCommon;
+      const dxfIdentity = dxf.consolidationKey
+        ? "approved:" + clean(dxf.consolidationKey).toLowerCase()
+        : hashCommon ? "sha256:" + clean(dxf.sha256) : clean(dxf.originalFilename).toLowerCase();
+      const identity = [dxfIdentity, clean(component.materialCode).toUpperCase(), material.toUpperCase(), thickness.toUpperCase(), finish.toUpperCase()].join("|");
       const key = identity;
       if (!grouped.has(key)) {
         grouped.set(key, {
@@ -44,7 +59,7 @@ export async function buildCuttingListWorkbook(payload = {}) {
           material: material || clean(component.materialCode) || "",
           thickness,
           finish,
-          sourceFixtureTag: dxf.consolidationKey ? "COMMON" : clean(dxf.fixtureTag),
+          sourceFixtureTag: isCommon ? "COMMON" : clean(dxf.fixtureTag),
           quantity: 0,
           unit: "PC",
           fixtureContributions: []
