@@ -118,3 +118,14 @@ The project workspace includes a project-level Laser Order Request generator.
 - Review the preview and exported workbook before releasing the order.
 
 Current limitation: project, fixture BOMs, generated-status flags and selected laser-order fixtures remain in browser memory for the current tab/session only. Refreshing or closing the tab clears them. PostgreSQL persistence and multi-project storage are future milestones.
+
+
+## Laser Order Request workbook format
+- The Laser Order Request uses a portrait, Letter-size worksheet with the same saved company logo as the fixture BOM, positioned over A1:B5.
+- Header fields use the company layout: order number at I2 with the value merged in J2:K2; customer/date on row 3; store/requested-by on row 4; PO/ship date on row 5. Row 6 is intentionally blank.
+- The table uses A for continuous item numbering, B:G merged for the exact original DXF filename, H for material, I for thickness, J for required quantity, and K for finish.
+- The three section groups are COMMON PARTS, 16GA CRS, and 11GA CRS. Each section receives a merged path/comment row in B:K in the format `SECTION\\LASER_DXF\\CUSTOMER\\PROJECT\\MOUNTING`. Column headings are repeated before the 16GA and 11GA detail rows.
+- C16 in the parsed DXF filename material-code token maps to CRS / 16GA; C11 maps to CRS / 11GA. This is a filename-token mapping, not extraction of hidden material metadata from inside the DXF geometry.
+- If no gauge can be determined from C11/C16 and no verified gauge is entered in the BOM component, export stops and asks for engineering review.
+- The K column finish uses a component-specific cutting-list finish when supplied; otherwise it falls back to the fixture schedule finish.
+- The exported filename follows `{Laser order number} {order date}-{ship date}.xlsx`; dates in the same month are compacted (for example, `RA-5075 Jul 02-26.xlsx`).
