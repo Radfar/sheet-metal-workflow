@@ -132,6 +132,7 @@ function engineeringExample(key, component) {
   const isPlate = /ENDCAP|SPLICE|PLT/.test(identity);
   const isGusset = /GUS/.test(identity);
   const examples = {
+    cuttingListIdentity: "Use the same approved common DXF filename/key only when source DXFs are confirmed identical.",
     componentType: isChannel ? "Suggested type: Channel — verify" : isAngle ? "Suggested type: Angle — verify" : isPlate ? "Suggested type: Plate — verify" : isGusset ? "Suggested type: Gusset — verify" : "Select the type shown on the drawing",
     materialCode: "e.g. C11 or C16 (DXF token only)",
     cuttingListIdentity: "Optional: enter the same approved common DXF filename/key only when different fixture DXFs are confirmed identical.",
