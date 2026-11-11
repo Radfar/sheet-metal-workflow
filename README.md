@@ -20,9 +20,9 @@ A Node.js web application for preparing fixture BOMs from SolidWorks BOM exports
 6. The application matches BOM part numbers against parsed DXF filenames. Click **Build BOM Component Tree View** to display the match results.
 7. Review the BOM, correct matches and engineering data, then click **Generate BOM Excel File**.
 8. Project Schedule Summary displays only fixtures whose BOM Excel file has been generated. A green check indicates generation; select or clear each fixture's checkbox to include or exclude it from the Laser Order Request.
-9. Generate the Laser Order Request from any selected set of generated fixture BOMs. Production quantities are calculated as BOM quantity per fixture multiplied by fixture schedule quantity.
+9. Generate the Laser Order Request from any selected set of generated fixture BOMs; completing the full project schedule is not required. The export button becomes available after at least one generated BOM is selected. Production quantities are calculated as BOM quantity per fixture multiplied by fixture schedule quantity.
 
-The browser folder picker requires a browser that supports directory selection (for example, current Chrome or Edge). Source files are read from the selected folder in the browser; only the SolidWorks workbook is sent to the local application server for parsing. The PDF is processed in the browser. DXF files are not uploaded.
+The preferred folder picker uses the browser File System Access API (current Chrome or Edge on localhost/HTTPS) to read the selected folder locally. This avoids the browser's bulk-folder upload confirmation. Only the SolidWorks workbook is sent to the local application server for parsing; the PDF is processed in the browser and DXF files are not uploaded. Browsers without this API use the directory-input fallback, which may show a browser-managed folder upload confirmation.
 
 ## BOM data sources
 - SolidWorks BOM is the source for item number, part number and quantity per fixture.
