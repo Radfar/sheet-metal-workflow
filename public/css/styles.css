@@ -95,3 +95,6 @@ footer{text-align:center;color:#9aa4ad;font-size:10px;padding:18px}
 
 /* Persistent BOM branding image upload controls */
 .logo-upload-row{margin-top:10px}
+
+/* High-contrast completion marker in the generated-BOM summary */
+.summary-check{color:#16803c;font-size:17px;font-weight:800;line-height:1}
