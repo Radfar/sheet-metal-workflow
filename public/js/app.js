@@ -974,6 +974,7 @@ function collectProjectBomData() {
       fixtureTag: item.tag,
       fixtureQuantity: item.qty,
       finish: item.finish,
+      mountingComment: item.mounting,
       components: saved.components.map(component => {
         const dxf = component.dxfIndex === "" || component.dxfIndex == null
           ? null : saved.dxfFiles?.[Number(component.dxfIndex)];
@@ -984,7 +985,7 @@ function collectProjectBomData() {
           materialGrade: component.materialGrade || "",
           gauge: component.gauge || "",
           cuttingListFinish: component.cuttingListFinish || "",
-          dxf: dxf ? { originalFilename: dxf.originalFilename, fixtureTag: dxf.fixtureTag, sha256: dxf.sha256 || "", consolidationKey: component.cuttingListIdentity || "", outputFilename: component.cuttingListIdentity || dxf.originalFilename } : null
+          dxf: dxf ? { originalFilename: dxf.originalFilename, fixtureTag: dxf.fixtureTag, materialCode: dxf.materialCode || "", sha256: dxf.sha256 || "", consolidationKey: component.cuttingListIdentity || "", outputFilename: dxf.originalFilename } : null
         };
       })
     });
@@ -1015,12 +1016,16 @@ function renderCuttingListPreview() {
       const dxfIdentity = component.dxf.consolidationKey
         ? "approved:" + component.dxf.consolidationKey.toLowerCase()
         : hashCommon ? "sha256:" + component.dxf.sha256 : component.dxf.originalFilename.toLowerCase();
-      const key = [dxfIdentity, String(component.materialCode || "").toUpperCase(), String(component.materialGrade || "").toUpperCase(), String(component.gauge || "").toUpperCase(), String(component.cuttingListFinish || "").toUpperCase()].join("|");
+      const materialCode = String(component.materialCode || component.dxf.materialCode || "").toUpperCase();
+      const material = component.materialGrade || (materialCode === "C11" || materialCode === "C16" ? "CRS" : "");
+      const thickness = component.gauge || (materialCode === "C11" ? "11GA" : materialCode === "C16" ? "16GA" : "");
+      const finish = component.cuttingListFinish || fixture.finish || "";
+      const key = [dxfIdentity, material.toUpperCase(), thickness.toUpperCase(), String(finish).toUpperCase()].join("|");
       if (!groups.has(key)) groups.set(key, {
-        dxfFilename: component.dxf.outputFilename || component.dxf.originalFilename,
-        material: component.materialGrade || component.materialCode || "",
-        thickness: component.gauge || "",
-        finish: component.cuttingListFinish || "",
+        dxfFilename: component.dxf.originalFilename,
+        material,
+        thickness,
+        finish,
         quantity: 0,
         common: isCommon,
         sources: new Set()
@@ -1040,7 +1045,7 @@ function renderCuttingListPreview() {
     a.thickness.localeCompare(b.thickness) || a.dxfFilename.localeCompare(b.dxfFilename)
   );
   $("cuttingListRows").innerHTML = cuttingListPreview.length ? cuttingListPreview.map(line => {
-    const section = line.common ? "COMMON PARTS" : (line.material || "MATERIAL NOT SPECIFIED") + " / " + (line.thickness || "THICKNESS NOT SPECIFIED");
+    const section = line.common ? "COMMON PARTS" : line.thickness + " CRS";
     return "<tr><td>" + esc(line.dxfFilename) + "</td><td>" + esc(section) + "</td><td>" + esc(line.material || "—") +
       "</td><td>" + esc(line.thickness || "—") + "</td><td>" + esc(line.quantity) +
       "</td><td>" + esc(line.finish || "—") + "</td><td>PC</td><td>" + esc([...line.sources].join(", ")) + "</td></tr>";
@@ -1095,8 +1100,9 @@ $("exportCuttingListBtn").addEventListener("click", async () => {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "Laser Order Request - " + ($("laserOrderNumber").value || "TBD") +
-      " - " + ($("projectName").value || "Project") + ".xlsx";
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const filenameMatch = disposition.match(/filename="([^"]+)"/i);
+    anchor.download = filenameMatch ? filenameMatch[1] : "Laser Order Request.xlsx";
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
