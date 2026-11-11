@@ -361,6 +361,8 @@ function loadFixture(tag) {
   $("dxfInput").value = saved?.dxfText || "";
   if ($("drawingTextPreview")) $("drawingTextPreview").value = drawingText;
   if ($("drawingTextDetails")) $("drawingTextDetails").hidden = !drawingText;
+  if ($("dxfFilenamePreview")) $("dxfFilenamePreview").value = saved?.sourceFiles?.dxfFilenames?.map(path => path.split("/").pop()).join("\n") || "";
+  if ($("dxfFilenameDetails")) $("dxfFilenameDetails").hidden = !saved?.sourceFiles?.dxfFilenames?.length;
   if ($("componentTreePanel")) $("componentTreePanel").hidden = true;
   if ($("buildComponentTreeBtn")) $("buildComponentTreeBtn").disabled = !(bomLines.length && dxfFiles.length);
   $("bomStatus").textContent = bomLines.length
@@ -639,11 +641,15 @@ async function importFixtureFolder() {
     $("parseStatus").textContent = dxfFiles.length + " DXF filenames read from " + tag + "/DXF/. DXF file contents were not uploaded.";
     $("parseStatus").className = "ok";
     $("fixtureSourcePaths").textContent = "Sources: PDF " + pdfCandidates[0].path + " · BOM " + bomCandidates[0].path + " · DXF " + tag + "/DXF/ (" + dxfEntries.length + " filenames).";
+    $("dxfFilenamePreview").value = dxfNames.join("\n");
+    $("dxfFilenameDetails").hidden = false;
     $("drawingTextPreview").value = drawingText || "No extractable text layer was found. The PDF remains available as a local source file during this folder selection.";
     $("drawingTextDetails").hidden = false;
     status.textContent = "Folder validated. BOM: " + bomResult.count + " rows; DXF filenames: " + dxfEntries.length + "; PDF pages: " + (pdfResult.pageCount || "not extracted") + "." + pdfWarning;
     status.className = pdfWarning ? "status-text" : "ok";
-    $("folderImportReview").textContent = "Source files have been read and filename matching is complete. Click Build BOM Component Tree View to review the matches.";
+    const unmatchedCount = components.filter(component => component.dxfIndex === "").length;
+    $("folderImportReview").textContent = "Source files have been read. " + (components.length - unmatchedCount) +
+      " BOM item(s) matched automatically; " + unmatchedCount + " remain unmatched for review. Click Build BOM Component Tree View.";
     $("buildComponentTreeBtn").disabled = false;
     $("componentTreePanel").hidden = true;
     renderSummary();
