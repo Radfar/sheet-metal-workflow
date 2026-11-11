@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PDF Drawing Extraction Test | Sheet Metal Workflow</title>
+  <style>
+    body{font-family:Arial,sans-serif;margin:24px;background:#f5f6f8;color:#222}
+    .card{max-width:1100px;margin:auto;background:#fff;border:1px solid #ddd;border-radius:10px;padding:22px}
+    h1{margin-top:0}.muted{color:#666}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0}
+    button{padding:9px 14px;border:1px solid #aaa;border-radius:6px;background:#fff;cursor:pointer}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    input[type=file]{max-width:100%}
+    #status{padding:10px;background:#f0f3f6;border-radius:6px;white-space:pre-wrap}
+    textarea{width:100%;min-height:360px;font:12px/1.45 Consolas,monospace;box-sizing:border-box}
+    table{width:100%;border-collapse:collapse;margin-top:18px;font-size:13px}
+    th,td{border:1px solid #ddd;padding:7px;text-align:left;vertical-align:top}
+    th{background:#f0f2f4}
+    .ok{color:#176b36}.warn{color:#8a5a00}
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>PDF Drawing Extraction Test</h1>
+  <p class="muted">Temporary test page for the <code>feature/pdf-drawing-extraction-test</code> branch. The selected PDF is processed in the browser and is not uploaded to the server.</p>
+
+  <div class="row">
+    <input id="pdfFile" type="file" accept="application/pdf,.pdf">
+    <button id="extractBtn" disabled>Extract PDF text</button>
+  </div>
+
+  <div id="status">Select a PDF to begin.</div>
+
+  <h2>Detected drawing data</h2>
+  <table>
+    <thead><tr><th>Field</th><th>Detected value</th></tr></thead>
+    <tbody id="fields"></tbody>
+  </table>
+
+  <h2>Raw extracted text</h2>
+  <textarea id="rawText" readonly placeholder="Extracted PDF text will appear here..."></textarea>
+</div>
+
+<script type="module">
+import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+
+const fileInput = document.getElementById("pdfFile");
+const extractBtn = document.getElementById("extractBtn");
+const statusEl = document.getElementById("status");
+const rawTextEl = document.getElementById("rawText");
+const fieldsEl = document.getElementById("fields");
+
+fileInput.addEventListener("change", () => {
+  extractBtn.disabled = !fileInput.files.length;
+  statusEl.textContent = fileInput.files.length
+    ? "PDF selected. Click Extract PDF text."
+    : "Select a PDF to begin.";
+});
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[ch]));
+}
+
+function firstMatch(text, patterns) {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1].trim();
+  }
+  return "";
+}
+
+function detectDrawingData(text) {
+  const normalized = text.replace(/[\t ]+/g, " ").replace(/\r/g, "");
+
+  const rows = [
+    ["Project / Store", firstMatch(normalized, [
+      /(?:project|store)\s*(?:number|#|no\.?)[\s:]*([A-Za-z0-9_-]+)/i,
+      /Menlo Park\s*#?\s*(\d+)/i
+    ])],
+    ["Fixture tag", firstMatch(normalized, [
+      /fixture\s*(?:tag|number|#|no\.?)?[\s:]*([A-Z]\d+[A-Z]?)/i,
+      /\b(T\d{2}[A-Z]?)\b/i
+    ])],
+    ["Overall size", firstMatch(normalized, [
+      /overall\s*(?:size|dimensions?)\s*[:=]?\s*([^\n]+)/i,
+      /(?:fixture|assembly)\s*(?:size|dimensions?)\s*[:=]?\s*([^\n]+)/i
+    ])],
+    ["Finish", firstMatch(normalized, [
+      /finish\s*[:=]\s*([^\n]+)/i
+    ])],
+    ["Drawing quantity", firstMatch(normalized, [
+      /(?:drawing\s*)?quantity\s*[:=]\s*(\d+)/i,
+      /(?:qty|quantity)\s*[:=]\s*(\d+)/i
+    ])],
+    ["Drawing date", firstMatch(normalized, [
+      /drawing\s*date\s*[:=]\s*([^\n]+)/i
+    ])],
+    ["Part numbers found", [...new Set(
+      [...normalized.matchAll(/\bT\d{2}[A-Z]?-(?:A|B|C|ANG-\d+|SHORT-ANG)\b/gi)].map(m => m[0].toUpperCase())
+    )].join(", ")]
+  ];
+
+  return rows;
+}
+
+extractBtn.addEventListener("click", async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  extractBtn.disabled = true;
+  rawTextEl.value = "";
+  fieldsEl.innerHTML = "";
+  statusEl.textContent = "Reading PDF...";
+
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    let text = "";
+
+    for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
+      statusEl.textContent = `Reading page ${pageNo} of ${pdf.numPages}...`;
+      const page = await pdf.getPage(pageNo);
+      const content = await page.getTextContent();
+      const pageText = content.items.map(item => item.str || "").join(" ");
+      text += `\n\n--- PAGE ${pageNo} ---\n${pageText}`;
+    }
+
+    rawTextEl.value = text.trim();
+
+    const detected = detectDrawingData(text);
+    fieldsEl.innerHTML = detected.map(([field, value]) =>
+      `<tr><td>${escapeHtml(field)}</td><td>${escapeHtml(value || "Not detected")}</td></tr>`
+    ).join("");
+
+    statusEl.innerHTML =
+      `<span class="ok">Extraction completed.</span> Pages: ${pdf.numPages}. Characters: ${text.length}.`;
+  } catch (error) {
+    console.error(error);
+    statusEl.innerHTML =
+      `<span class="warn">PDF extraction failed:</span> ${escapeHtml(error.message || error)}`;
+  } finally {
+    extractBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

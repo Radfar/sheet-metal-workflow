@@ -3,16 +3,30 @@
 A Node.js web application for preparing fixture BOMs from SolidWorks BOM exports and DXF filename lists.
 
 ## Current workflow
-1. Enter project details.
-2. Select a fixture from the project schedule.
-3. Import the original SolidWorks BOM as either legacy Excel .xls or modern .xlsx.
-4. Paste the corresponding DXF filenames and parse them.
-5. Review automatic matches, select unmatched DXF files manually, and enter final manufacturing descriptions.
-6. Generate the fixture BOM in the agreed Excel layout (.xlsx).
+1. Enter or confirm the project schedule and select a fixture tag.
+2. Select the fixture's folder using the browser's folder picker. The folder name must exactly match the selected uppercase fixture tag (for example, `T01A`).
+3. The fixture folder must contain:
+   ```text
+   T01A/
+   ├── T01A.pdf
+   ├── T01A.xls   (or T01A.xlsx)
+   └── DXF/
+       ├── part-01.DXF
+       ├── part-02.DXF
+       └── ...
+   ```
+4. The application reads the SolidWorks BOM workbook and extracts the DXF filenames from the `DXF` subfolder. DXF files are fingerprinted locally with SHA-256 to detect byte-identical parts across selected fixtures; file contents are never uploaded.
+5. The drawing PDF is processed locally in the browser with PDF.js. Extracted text is displayed as reference material; it is not treated as verified engineering data automatically.
+6. The application matches BOM part numbers against parsed DXF filenames. Click **Build BOM Component Tree View** to display the match results.
+7. Review the BOM, correct matches and engineering data, then click **Generate BOM Excel File**.
+8. Project Schedule Summary displays only fixtures whose BOM Excel file has been generated. A green check indicates generation; select or clear each fixture's checkbox to include or exclude it from the Laser Order Request.
+9. Generate the Laser Order Request from any selected set of generated fixture BOMs; completing the full project schedule is not required. The export button becomes available after at least one generated BOM is selected. Production quantities are calculated as BOM quantity per fixture multiplied by fixture schedule quantity.
+
+The preferred folder picker uses the browser File System Access API (current Chrome or Edge on localhost/HTTPS) to read the selected folder locally. This avoids the browser's bulk-folder upload confirmation. Only the SolidWorks workbook is sent to the local application server for parsing; the PDF is processed in the browser. DXF files are fingerprinted locally with SHA-256 for exact byte-for-byte comparison, but their contents are never uploaded. Browsers without this API use the directory-input fallback, which may show a browser-managed folder upload confirmation.
 
 ## BOM data sources
 - SolidWorks BOM is the source for item number, part number and quantity per fixture.
-- DXF filenames provide source-file traceability, material-code tokens and flat-pattern dimensions where recognizable.
+- DXF filenames provide source-file traceability, material-code tokens and flat-pattern dimensions where recognizable. The browser also calculates a local SHA-256 fingerprint for each DXF; matching fingerprints across selected fixtures identify byte-identical common parts without uploading DXF contents.
 - If a SolidWorks description is blank, the app creates a clearly labelled draft from the matched DXF filename: component type, part number, flat-pattern dimensions and the original material-code token. Engineering must review and edit the draft before release.
 - The app does not infer material grade, gauge, finished profile dimensions or manufacturing process from C11/C16 or flat-pattern dimensions.
 - Purchased items can remain in the BOM without an associated DXF file.
@@ -72,3 +86,46 @@ The manufacturing-data editor displays field-level examples drawn from the previ
 - Footer labels are written at A38 (Finish Date), G38 (Shift Date), K38 (Track Number #1), A39 (Note), A42 (Cut By), and H42 (Cut Date). The print area is A1:K42.
 - Both branding images and the footer are repeated on each worksheet when a BOM spans multiple sheets.
 - Branding images are stored in the local `data/template-assets.json` file at runtime; keep this data directory persistent when deploying or moving the application.
+
+
+## PDF drawing extraction test (feature branch)
+
+The branch `feature/pdf-drawing-extraction-test` adds a temporary browser-based PDF extraction test page:
+
+- Open `/pdf-test.html` while running the application.
+- Select a text-based engineering drawing PDF.
+- Extract text page-by-page.
+- Review raw extracted text and a small set of detected drawing fields.
+- The PDF is processed locally in the browser and is not uploaded to the Node.js server.
+
+This is intentionally a test before adding PDF data into the main BOM workflow. It lets us determine whether the actual SolidWorks/CATIA drawing PDFs contain usable text-layer data.
+
+Scanned/image-only PDFs will require OCR in a later step.
+
+
+## Consolidated Laser Order Request (initial implementation)
+
+The project workspace includes a project-level Laser Order Request generator.
+
+- The generator reads fixture BOMs retained in the current browser session.
+- Required production quantity is calculated as SolidWorks BOM quantity per fixture multiplied by the fixture schedule quantity.
+- Components are consolidated by exact DXF filename by default, with material code, material/grade, thickness and optional component finish included in the identity.
+- If different fixture-specific DXF filenames are confirmed to represent the same approved common part, enter the same Approved common DXF identity / filename in each component's Manufacturing data. The entered identity becomes the consolidated output filename; original DXF filenames remain available in the fixture data.
+- Common DXFs with no fixture tag, byte-identical DXFs found in multiple selected fixtures, and explicitly approved common identities are placed in a COMMON PARTS section. Other lines are grouped by material and thickness. Matching hashes prove byte identity, not geometric equivalence between different files.
+- BOM components without a matched DXF are excluded from the laser order; purchased hardware is not a laser-cutting line.
+- Material grade and gauge are not inferred from C11/C16. Enter verified values from the drawing or material specification. The material-code token is retained separately.
+- The FINISH column remains blank unless a component-level cutting-list finish is explicitly supplied.
+- Review the preview and exported workbook before releasing the order.
+
+Current limitation: project, fixture BOMs, generated-status flags and selected laser-order fixtures remain in browser memory for the current tab/session only. Refreshing or closing the tab clears them. PostgreSQL persistence and multi-project storage are future milestones.
+
+
+## Laser Order Request workbook format
+- The Laser Order Request uses a portrait, Letter-size worksheet with the same saved company logo as the fixture BOM, positioned over A1:B5.
+- Header fields use the company layout: order number at I2 with the value merged in J2:K2; customer/date on row 3; store/requested-by on row 4; PO/ship date on row 5. Row 6 is intentionally blank.
+- The table uses A for continuous item numbering, B:G merged for the exact original DXF filename, H for material, I for thickness, J for required quantity, and K for finish.
+- The three section groups are COMMON PARTS, 16GA CRS, and 11GA CRS. Each section receives a merged path/comment row in B:K in the format `SECTION\\LASER_DXF\\CUSTOMER\\PROJECT\\MOUNTING`. Column headings are repeated before the 16GA and 11GA detail rows.
+- C16 in the parsed DXF filename material-code token maps to CRS / 16GA; C11 maps to CRS / 11GA. This is a filename-token mapping, not extraction of hidden material metadata from inside the DXF geometry.
+- If no gauge can be determined from C11/C16 and no verified gauge is entered in the BOM component, export stops and asks for engineering review.
+- The K column finish uses a component-specific cutting-list finish when supplied; otherwise it falls back to the fixture schedule finish.
+- The exported filename follows `{Laser order number} {order date}-{ship date}.xlsx`; dates in the same month are compacted (for example, `RA-5075 Jul 02-26.xlsx`).
