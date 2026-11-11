@@ -36,7 +36,7 @@ export async function buildCuttingListWorkbook(payload = {}) {
           material: material || clean(component.materialCode) || "",
           thickness,
           finish,
-          sourceFixtureTag: clean(dxf.fixtureTag),
+          sourceFixtureTag: dxf.consolidationKey ? "COMMON" : clean(dxf.fixtureTag),
           quantity: 0,
           unit: "PC",
           fixtureContributions: []
@@ -51,6 +51,8 @@ export async function buildCuttingListWorkbook(payload = {}) {
   }
 
   const lines = [...grouped.values()].sort((a,b) =>
+    (a.sourceFixtureTag.toUpperCase() === "COMMON" ? 0 : 1) -
+    (b.sourceFixtureTag.toUpperCase() === "COMMON" ? 0 : 1) ||
     a.material.localeCompare(b.material) || a.thickness.localeCompare(b.thickness) ||
     a.dxfFilename.localeCompare(b.dxfFilename)
   );
