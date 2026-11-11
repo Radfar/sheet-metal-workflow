@@ -85,11 +85,14 @@
     <section class="panel" id="fixtureFolderPanel">
     <div class="heading"><h2><b>03</b> Fixture folder import</h2><small>Automatic source discovery</small></div>
     <p class="notice">Select the fixture folder named exactly like its schedule tag (for example, <strong>T01A</strong>). It must contain <strong>T01A.pdf</strong>, <strong>T01A.xls</strong> or <strong>T01A.xlsx</strong>, and an uppercase <strong>DXF</strong> subfolder. The folder is read locally in your browser. Only the SolidWorks BOM workbook is sent to the local application server. DXF files are fingerprinted locally for exact byte-for-byte comparison; their contents are never uploaded.</p>
-    <div class="file-actions">
+    <div class="file-actions folder-picker-actions">
       <button id="chooseFixtureFolderBtn" class="secondary" type="button">Choose Folder</button>
       <input id="fixtureFolderInput" type="file" webkitdirectory directory multiple hidden>
-      <button id="importFixtureFolderBtn" type="button">Read fixture folder</button>
       <span id="fixtureFolderStatus" class="status-text">Select the current fixture folder.</span>
+    </div>
+    <div class="folder-validation">
+      <div id="folderBomDxfCheck" class="folder-check pending">✓ <span>SolidWorks BOM and DXF files discovered from the selected folder</span></div>
+      <div id="folderPdfCheck" class="folder-check pending">✓ <span>Drawing PDF loaded — extracted text is reference only</span></div>
     </div>
     <p id="fixtureSourcePaths" class="status-text">Source references: drawing PDF —; SolidWorks BOM —; DXF folder —.</p>
     <details id="dxfFilenameDetails" hidden><summary>DXF filenames discovered from the selected folder</summary><textarea id="dxfFilenamePreview" rows="7" readonly></textarea></details>
