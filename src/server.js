@@ -496,7 +496,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
 app.post("/api/export-cutting-list-xlsx", async (req, res) => {
   try {
     const result = await buildCuttingListWorkbook(req.body || {});
-    const safe = value => String(value || "").replace(/[<>:"/\\\\|?*\\x00-\\x1F]/g, "").replace(/\\s+/g, " ").trim();
+    const safe = value => String(value || "").trim().replaceAll("/", "-").replaceAll(String.fromCharCode(92), "-").replace(/[^a-zA-Z0-9 _.-]/g, "").replace(/\s+/g, " ");
     const filename = "Laser Order Request - " + (safe(req.body?.orderNumber) || "TBD") + " - " + (safe(req.body?.projectName) || "Project") + ".xlsx";
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="' + filename + '"');
