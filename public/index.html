@@ -86,7 +86,8 @@
     <div class="heading"><h2><b>03</b> Fixture folder import</h2><small>Automatic source discovery</small></div>
     <p class="notice">Select the fixture folder named exactly like its schedule tag (for example, <strong>T01A</strong>). It must contain <strong>T01A.pdf</strong>, <strong>T01A.xls</strong> or <strong>T01A.xlsx</strong>, and an uppercase <strong>DXF</strong> subfolder. The BOM is read by the application; only DXF filenames are read, not DXF file contents.</p>
     <div class="file-actions">
-      <input id="fixtureFolderInput" type="file" webkitdirectory directory multiple>
+      <button id="chooseFixtureFolderBtn" class="secondary" type="button">Choose Folder</button>
+      <input id="fixtureFolderInput" type="file" webkitdirectory directory multiple hidden>
       <button id="importFixtureFolderBtn" type="button">Read fixture folder</button>
       <span id="fixtureFolderStatus" class="status-text">Select the current fixture folder.</span>
     </div>
