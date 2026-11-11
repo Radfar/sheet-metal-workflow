@@ -1,4 +1,9 @@
 import ExcelJS from "exceljs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const LASER_TEMPLATE_PATH = path.join(__dirname, "../test-data/Excel/RA-5075 Jul 02-26.xlsx");
 
 function clean(value) {
   return String(value ?? "").trim();
@@ -169,119 +174,82 @@ export async function buildCuttingListWorkbook(payload = {}) {
     groups[key].sort((a, b) => a.dxfFilename.localeCompare(b.dxfFilename));
   }
 
+  // Load the company's original workbook and populate its preformatted print layout.
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Sheet Metal Workflow";
-  workbook.created = new Date();
-  const ws = workbook.addWorksheet("Laser Order Request");
+  await workbook.xlsx.readFile(LASER_TEMPLATE_PATH);
+  const ws = workbook.getWorksheet("Sheet1");
+  if (!ws) throw new Error("The Laser Order Request template is missing Sheet1.");
 
-  ws.columns = [
-    { width: 5 }, { width: 8.5 }, { width: 8.5 }, { width: 8.5 },
-    { width: 8.5 }, { width: 8.5 }, { width: 8.5 },
-    { width: 10 }, { width: 8 }, { width: 10 }, { width: 12 }
-  ];
-
-  // Company logo: A1:B5, using the same saved logo asset as the fixture BOM.
-  const logo = payload.logoAsset;
-  if (logo?.dataUrl && logo?.extension) {
-    const base64 = logo.dataUrl.split(",")[1];
-    const imageId = workbook.addImage({ base64, extension: logo.extension });
-    ws.addImage(imageId, {
-      tl: { col: 0, row: 0 },
-      br: { col: 2, row: 5 },
-      editAs: "oneCell"
-    });
+  // The source workbook contains auxiliary worksheets; this export is the LOR form only.
+  for (const sheet of [...workbook.worksheets]) {
+    if (sheet.id !== ws.id) workbook.removeWorksheet(sheet.id);
   }
+  ws.name = "Laser Order Request";
 
-  // Header fields follow the fixture BOM's customer form positions.
-  ws.mergeCells("D3:F3");
-  ws.mergeCells("I3:K3");
-  ws.mergeCells("D4:F4");
-  ws.mergeCells("I4:K4");
-  ws.mergeCells("D5:F5");
-  ws.mergeCells("I5:K5");
-  ws.mergeCells("J2:K2");
-
-  const headerValues = {
-    "C3": "CUSTOMER:", "D3": clean(payload.customer),
-    "H3": "DATE:",
-    "I2": "ORDER #:",
-    "C4": "STORE #:", "D4": clean(payload.storeNumber),
-    "H4": "REQUESTED BY:", "I4": clean(payload.requestedBy),
-    "C5": "PO #:", "D5": clean(payload.poNumber),
-    "H5": "SHIP DATE:"
-  };
-  for (const [address, value] of Object.entries(headerValues)) ws.getCell(address).value = value;
-  ws.getCell("I3").value = excelDate(payload.orderDate) || clean(payload.orderDate);
-  ws.getCell("I3").numFmt = "mmmm d, yyyy";
-  ws.getCell("I5").value = excelDate(payload.shipDate) || clean(payload.shipDate);
-  ws.getCell("I5").numFmt = "mmmm d, yyyy";
+  // Update only input cells. The original merged ranges, fonts, borders, logo,
+  // column widths, row heights and print settings remain template-controlled.
   ws.getCell("J2").value = clean(payload.orderNumber);
+  ws.getCell("D3").value = clean(payload.customer);
+  ws.getCell("I3").value = excelDate(payload.orderDate) || clean(payload.orderDate);
+  ws.getCell("D4").value = clean(payload.storeNumber);
+  ws.getCell("I4").value = clean(payload.requestedBy);
+  ws.getCell("D5").value = clean(payload.poNumber);
+  ws.getCell("I5").value = excelDate(payload.shipDate) || clean(payload.shipDate);
 
-  for (const address of ["I2","C3","H3","C4","H4","C5","H5"]) {
-    ws.getCell(address).font = { name: "Arial", size: 9, bold: true };
+  const sectionRows = {
+    common: { title: "COMMON PARTS", headingRow: 8, firstRow: 9, lastRow: 21 },
+    gauge16: { title: "16GA CRS", headingRow: 22, firstRow: 23, lastRow: 105 },
+    gauge11: { title: "11GA CRS", headingRow: 106, firstRow: 107, lastRow: 175 }
+  };
+
+  function sectionHeadingText(section, payload) {
+    const folderPrefix = section.key === "common"
+      ? section.title + " / laser_dxf\\"
+      : section.title + " / \\laser_dxf\\";
+    const folders = [
+      clean(payload.customer),
+      clean(payload.projectName),
+      clean(payload.mountingComment),
+      section.title
+    ].filter(Boolean);
+    return folderPrefix + folders.join("\\");
   }
-  for (const address of ["D3","I3","D4","I4","D5","I5","J2"]) {
-    ws.getCell(address).font = { name: "Arial", size: 9, bold: address === "J2" };
-    ws.getCell(address).alignment = { vertical: "middle", horizontal: "left", wrapText: true };
-  }
 
-  for (let row = 1; row <= 5; row++) ws.getRow(row).height = 20;
-  ws.getRow(1).height = 22;
-  ws.getRow(6).height = 8;
-
-  // Header row, section comments and data are repeated in the same order for each material group.
-  applyTableHeader(ws, 7);
-  let row = 8;
-  let itemNumber = 1;
-  for (const section of sectionDefinitions) {
-    addSectionComment(ws, row, section.title, payload);
-    row++;
-    if (section.key !== "common") {
-      applyTableHeader(ws, row);
-      row++;
+  // Clear old sample data while retaining all template cell formatting and merges.
+  for (const section of Object.values(sectionRows)) {
+    ws.getCell(section.headingRow, 2).value = null;
+    for (let row = section.firstRow; row <= section.lastRow; row++) {
+      for (const column of [1, 2, 8, 9, 10, 11]) {
+        ws.getCell(row, column).value = null;
+      }
     }
-    for (const line of groups[section.key]) {
-      ws.getCell(row, 1).value = itemNumber++;
-      ws.mergeCells(row, 2, row, 7);
+  }
+
+  for (const section of sectionDefinitions) {
+    const layout = sectionRows[section.key];
+    ws.getCell(layout.headingRow, 2).value = sectionHeadingText(layout, payload);
+
+    const lines = groups[section.key];
+    const capacity = layout.lastRow - layout.firstRow + 1;
+    if (lines.length > capacity) {
+      throw new Error(
+        section.title + " contains " + lines.length + " lines, but the original LOR template supports " +
+        capacity + ". The template layout must be extended before exporting this order."
+      );
+    }
+
+    lines.forEach((line, index) => {
+      const row = layout.firstRow + index;
+      ws.getCell(row, 1).value = index + 1;
       ws.getCell(row, 2).value = line.dxfFilename;
       ws.getCell(row, 8).value = line.material;
       ws.getCell(row, 9).value = line.gauge;
       ws.getCell(row, 10).value = line.quantity;
       ws.getCell(row, 11).value = line.finish;
-
-      for (let col = 1; col <= 11; col++) {
-        const cell = ws.getCell(row, col);
-        cell.font = { name: "Arial", size: 8 };
-        cell.alignment = {
-          horizontal: col === 1 || col >= 8 ? "center" : "left",
-          vertical: "middle",
-          wrapText: col === 2
-        };
-        cell.border = {
-          left: { style: "thin" }, right: { style: "thin" },
-          bottom: { style: "hair" }
-        };
-      }
-      ws.getRow(row).height = 20;
-      row++;
-    }
-    row++;
+    });
   }
 
-  // Print-ready portrait layout; allow additional pages vertically while fitting all columns to one page width.
-  ws.pageSetup = {
-    orientation: "portrait",
-    fitToPage: true,
-    fitToWidth: 1,
-    fitToHeight: 0,
-    paperSize: ws.PAPERSIZE_LETTER,
-    margins: { left: 0.2, right: 0.2, top: 0.25, bottom: 0.25, header: 0.1, footer: 0.1 },
-    horizontalDpi: 300,
-    verticalDpi: 300
-  };
-  ws.pageSetup.printArea = "A1:K" + (row - 1);
-  ws.pageSetup.horizontalCentered = false;
-  ws.views = [{ state: "normal", showGridLines: false }];
+  const buffer = await workbook.xlsx.writeBuffer();
 
   const filenameOrder = safeFilename(payload.orderNumber) || "TBD";
   const dateRange = formatOrderShipRange(payload.orderDate, payload.shipDate);
