@@ -227,7 +227,7 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
   for (const section of sectionDefinitions) {
     const layout = sectionRows[section.key];
-    ws.getCell(layout.headingRow, 2).value = sectionHeadingText(layout, payload);
+    ws.getCell(layout.headingRow, 2).value = sectionHeadingText({ ...layout, key: section.key }, payload);
 
     const lines = groups[section.key];
     const capacity = layout.lastRow - layout.firstRow + 1;
@@ -248,8 +248,6 @@ export async function buildCuttingListWorkbook(payload = {}) {
       ws.getCell(row, 11).value = line.finish;
     });
   }
-
-  const buffer = await workbook.xlsx.writeBuffer();
 
   const filenameOrder = safeFilename(payload.orderNumber) || "TBD";
   const dateRange = formatOrderShipRange(payload.orderDate, payload.shipDate);
