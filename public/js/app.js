@@ -1046,6 +1046,14 @@ function collectProjectBomData() {
 }
 
 let cuttingListPreview = [];
+function normalizeCommonDxfFilename(filename, fixtureTag) {
+  const name = String(filename || "").trim().toLowerCase();
+  const tag = String(fixtureTag || "").trim().toLowerCase();
+  if (!name || !tag) return name;
+  const escaped = tag.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\function renderCuttingListPreview() {");
+  return name.replace(new RegExp("(^|[^a-z0-9])" + escaped + "(?=[^a-z0-9]|$)", "i"), "$1");
+}
+
 function renderCuttingListPreview() {
   const fixtures = collectProjectBomData();
   const groups = new Map();
@@ -1059,15 +1067,36 @@ function renderCuttingListPreview() {
     }
   }
   const commonHashes = new Set([...hashFixtureMap.entries()].filter(([, tags]) => tags.size > 1).map(([hash]) => hash));
+  const commonFilenameMap = new Map();
+  for (const fixture of fixtures) {
+    const fixtureTag = String(fixture.fixtureTag || "").trim();
+    for (const component of fixture.components) {
+      const dxf = component.dxf;
+      if (!dxf) continue;
+      const commonKey = normalizeCommonDxfFilename(dxf.originalFilename, fixtureTag);
+      if (!commonFilenameMap.has(commonKey)) commonFilenameMap.set(commonKey, new Set());
+      commonFilenameMap.get(commonKey).add(fixtureTag.toUpperCase());
+    }
+  }
+  const commonFilenameKeys = new Set([...commonFilenameMap.entries()]
+    .filter(([, tags]) => tags.size > 1)
+    .map(([key]) => key));
   let noDxfCount = 0;
   for (const fixture of fixtures) {
     for (const component of fixture.components) {
       if (!component.dxf) { noDxfCount++; continue; }
       const hashCommon = Boolean(component.dxf.sha256 && commonHashes.has(component.dxf.sha256));
-      const isCommon = Boolean(component.dxf.consolidationKey) || String(component.dxf.fixtureTag || "").toUpperCase() === "COMMON" || hashCommon;
+      const commonFilenameKey = normalizeCommonDxfFilename(component.dxf.originalFilename, fixture.fixtureTag);
+      const filenameCommon = commonFilenameKeys.has(commonFilenameKey);
+      const isCommon = Boolean(component.dxf.consolidationKey) ||
+        String(component.dxf.fixtureTag || "").toUpperCase() === "COMMON" ||
+        hashCommon ||
+        filenameCommon;
       const dxfIdentity = component.dxf.consolidationKey
         ? "approved:" + component.dxf.consolidationKey.toLowerCase()
-        : hashCommon ? "sha256:" + component.dxf.sha256 : component.dxf.originalFilename.toLowerCase();
+        : hashCommon ? "sha256:" + component.dxf.sha256
+        : filenameCommon ? "common-filename:" + commonFilenameKey
+        : component.dxf.originalFilename.toLowerCase();
       const materialCode = String(component.materialCode || component.dxf.materialCode || "").toUpperCase();
       const material = component.materialGrade || (materialCode === "C11" || materialCode === "C16" ? "CRS" : "");
       const thickness = component.gauge || (materialCode === "C11" ? "11GA" : materialCode === "C16" ? "16GA" : "");
