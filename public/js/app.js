@@ -1070,6 +1070,7 @@ $("exportCuttingListBtn").addEventListener("click", async () => {
     if (!fixtures.length) throw new Error("Generate at least one fixture BOM and include it in the Project Schedule Summary.");
     renderCuttingListPreview();
     if (!cuttingListPreview.length) throw new Error("No matched DXF components are available for the Laser Order Request.");
+    button.disabled = true;
     $("cuttingListStatus").textContent = "Generating Laser Order Request Excel…";
     const response = await fetch("/api/export-cutting-list-xlsx", {
       method: "POST",
