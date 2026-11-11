@@ -72,3 +72,18 @@ The manufacturing-data editor displays field-level examples drawn from the previ
 - Footer labels are written at A38 (Finish Date), G38 (Shift Date), K38 (Track Number #1), A39 (Note), A42 (Cut By), and H42 (Cut Date). The print area is A1:K42.
 - Both branding images and the footer are repeated on each worksheet when a BOM spans multiple sheets.
 - Branding images are stored in the local `data/template-assets.json` file at runtime; keep this data directory persistent when deploying or moving the application.
+
+
+## PDF drawing extraction test (feature branch)
+
+The branch `feature/pdf-drawing-extraction-test` adds a temporary browser-based PDF extraction test page:
+
+- Open `/pdf-test.html` while running the application.
+- Select a text-based engineering drawing PDF.
+- Extract text page-by-page.
+- Review raw extracted text and a small set of detected drawing fields.
+- The PDF is processed locally in the browser and is not uploaded to the Node.js server.
+
+This is intentionally a test before adding PDF data into the main BOM workflow. It lets us determine whether the actual SolidWorks/CATIA drawing PDFs contain usable text-layer data.
+
+Scanned/image-only PDFs will require OCR in a later step.
