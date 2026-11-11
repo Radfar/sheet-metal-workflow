@@ -867,6 +867,8 @@ $("exportBtn").addEventListener("click", async () => {
   } catch (error) {
     $("parseStatus").textContent = error.message;
     $("parseStatus").className = "error";
+    $("folderImportReview").textContent = "BOM Excel generation failed: " + error.message;
+    $("folderImportReview").className = "error";
   } finally {
     button.disabled = components.length === 0;
   }
