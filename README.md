@@ -22,11 +22,11 @@ A Node.js web application for preparing fixture BOMs from SolidWorks BOM exports
 8. Project Schedule Summary displays only fixtures whose BOM Excel file has been generated. A green check indicates generation; select or clear each fixture's checkbox to include or exclude it from the Laser Order Request.
 9. Generate the Laser Order Request from any selected set of generated fixture BOMs; completing the full project schedule is not required. The export button becomes available after at least one generated BOM is selected. Production quantities are calculated as BOM quantity per fixture multiplied by fixture schedule quantity.
 
-The preferred folder picker uses the browser File System Access API (current Chrome or Edge on localhost/HTTPS) to read the selected folder locally. This avoids the browser's bulk-folder upload confirmation. Only the SolidWorks workbook is sent to the local application server for parsing; the PDF is processed in the browser and DXF files are not uploaded. Browsers without this API use the directory-input fallback, which may show a browser-managed folder upload confirmation.
+The preferred folder picker uses the browser File System Access API (current Chrome or Edge on localhost/HTTPS) to read the selected folder locally. This avoids the browser's bulk-folder upload confirmation. Only the SolidWorks workbook is sent to the local application server for parsing; the PDF is processed in the browser. DXF files are fingerprinted locally with SHA-256 for exact byte-for-byte comparison, but their contents are never uploaded. Browsers without this API use the directory-input fallback, which may show a browser-managed folder upload confirmation.
 
 ## BOM data sources
 - SolidWorks BOM is the source for item number, part number and quantity per fixture.
-- DXF filenames provide source-file traceability, material-code tokens and flat-pattern dimensions where recognizable.
+- DXF filenames provide source-file traceability, material-code tokens and flat-pattern dimensions where recognizable. The browser also calculates a local SHA-256 fingerprint for each DXF; matching fingerprints across selected fixtures identify byte-identical common parts without uploading DXF contents.
 - If a SolidWorks description is blank, the app creates a clearly labelled draft from the matched DXF filename: component type, part number, flat-pattern dimensions and the original material-code token. Engineering must review and edit the draft before release.
 - The app does not infer material grade, gauge, finished profile dimensions or manufacturing process from C11/C16 or flat-pattern dimensions.
 - Purchased items can remain in the BOM without an associated DXF file.
@@ -111,7 +111,7 @@ The project workspace includes a project-level Laser Order Request generator.
 - Required production quantity is calculated as SolidWorks BOM quantity per fixture multiplied by the fixture schedule quantity.
 - Components are consolidated by exact DXF filename by default, with material code, material/grade, thickness and optional component finish included in the identity.
 - If different fixture-specific DXF filenames are confirmed to represent the same approved common part, enter the same Approved common DXF identity / filename in each component's Manufacturing data. The entered identity becomes the consolidated output filename; original DXF filenames remain available in the fixture data.
-- Common DXFs identified by the parser as COMMON are placed in a COMMON PARTS section. Other lines are grouped by material and thickness.
+- Common DXFs with no fixture tag, byte-identical DXFs found in multiple selected fixtures, and explicitly approved common identities are placed in a COMMON PARTS section. Other lines are grouped by material and thickness. Matching hashes prove byte identity, not geometric equivalence between different files.
 - BOM components without a matched DXF are excluded from the laser order; purchased hardware is not a laser-cutting line.
 - Material grade and gauge are not inferred from C11/C16. Enter verified values from the drawing or material specification. The material-code token is retained separately.
 - The FINISH column remains blank unless a component-level cutting-list finish is explicitly supplied.
