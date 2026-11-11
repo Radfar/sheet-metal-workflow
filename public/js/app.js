@@ -4,6 +4,7 @@ let components = [];
 let bomLines = [];
 let dxfFiles = [];
 let currentFixtureTag = "";
+let drawingText = "";
 const fixtureData = {};
 let templateAssets = { stellarLogo: "", radioButton: "" };
 
@@ -215,7 +216,12 @@ function saveCurrentFixture() {
     components: clone(components),
     dxfText: $("dxfInput").value,
     finishDescription: $("finishDescription").value,
-    bomFilenameDescription: $("bomFilenameDescription").value
+    bomFilenameDescription: $("bomFilenameDescription").value,
+    sourceFiles: clone(fixtureData[currentFixtureTag]?.sourceFiles || {}),
+    drawingText: drawingText || fixtureData[currentFixtureTag]?.drawingText || "",
+    bomGenerated: Boolean(fixtureData[currentFixtureTag]?.bomGenerated),
+    generatedAt: fixtureData[currentFixtureTag]?.generatedAt || "",
+    includeInLaser: fixtureData[currentFixtureTag]?.includeInLaser !== false
   };
 }
 
@@ -259,15 +265,19 @@ function renderSelectedSchedule() {
 }
 
 function renderSummary() {
-  $("summaryRows").innerHTML = schedule.map(item => {
+  const generated = schedule.filter(item => fixtureData[item.tag]?.bomGenerated);
+  $("summaryRows").innerHTML = generated.length ? generated.map(item => {
     const saved = fixtureData[item.tag];
-    const count = item.tag === currentFixtureTag ? components.length : (saved?.components?.length || 0);
+    const count = saved?.components?.length || 0;
+    const include = saved?.includeInLaser !== false;
     return '<tr><td>' + esc(item.no) + '</td><td>' + esc(item.tag) + '</td><td>' +
       esc(item.mounting) + '</td><td>' + esc(item.profile) + '</td><td>' +
       esc(item.width) + '</td><td>' + esc(item.length) + '</td><td>' +
       esc(item.finish) + '</td><td>' + esc(item.qty) + '</td><td>' +
-      (count ? esc(count) : "—") + '</td></tr>';
-  }).join("");
+      esc(count) + '</td><td><span class="ok" title="BOM Excel generated">✓</span></td>' +
+      '<td><input type="checkbox" data-laser-include="' + esc(item.tag) + '"' + (include ? ' checked' : '') +
+      ' aria-label="Include ' + esc(item.tag) + ' in Laser Order Request"></td></tr>';
+  }).join("") : '<tr><td colspan="11" class="empty">No fixture BOM has been generated yet.</td></tr>';
 }
 
 function renderComponents() {
@@ -339,13 +349,16 @@ function loadFixture(tag) {
   bomLines = saved ? clone(saved.bomLines) : [];
   dxfFiles = saved ? clone(saved.dxfFiles) : [];
   components = saved ? clone(saved.components) : [];
+  drawingText = saved?.drawingText || "";
   $("dxfInput").value = saved?.dxfText || "";
+  if ($("drawingTextPreview")) $("drawingTextPreview").value = drawingText;
+  if ($("drawingTextDetails")) $("drawingTextDetails").hidden = !drawingText;
   $("bomStatus").textContent = bomLines.length
     ? bomLines.length + " SolidWorks BOM item(s) loaded for " + item.tag + "."
     : "No SolidWorks BOM imported for " + item.tag + ".";
   $("parseStatus").textContent = dxfFiles.length
     ? dxfFiles.length + " DXF filename(s) available for " + item.tag + "."
-    : "Paste the DXF filenames for " + item.tag + ".";
+    : "Read the " + item.tag + " fixture folder to discover DXF filenames.";
   $("scheduleStatus").textContent = item.tag + " loaded. Its BOM data is kept separately from other fixtures.";
   $("scheduleStatus").className = "ok";
   render();
@@ -532,6 +545,127 @@ $("parseBtn").addEventListener("click", async () => {
   }
 });
 
+async function extractDrawingPdfText(pdfFile) {
+  const pdfjsLib = await import("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+  const bytes = new Uint8Array(await pdfFile.arrayBuffer());
+  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+  let text = "";
+  for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
+    const page = await pdf.getPage(pageNo);
+    const content = await page.getTextContent();
+    const pageText = content.items.map(item => item.str || "").join(" ");
+    text += "\n\n--- PAGE " + pageNo + " ---\n" + pageText;
+  }
+  return { text: text.trim(), pageCount: pdf.numPages };
+}
+
+async function importFixtureFolder() {
+  const selected = Array.from($("fixtureFolderInput").files || []);
+  const tag = $("fixtureSelect").value;
+  const status = $("fixtureFolderStatus");
+  const button = $("importFixtureFolderBtn");
+  if (!selected.length) throw new Error("Select the fixture folder first.");
+  if (!tag) throw new Error("Select a fixture tag from the project schedule.");
+  const entries = selected.map(file => ({ file, path: String(file.webkitRelativePath || file.name).replace(/\\\\/g, "/") }));
+  const roots = [...new Set(entries.map(entry => entry.path.split("/")[0]))];
+  if (roots.length !== 1 || roots[0] !== tag) {
+    throw new Error("The selected folder must be named exactly " + tag + " (uppercase, matching the schedule). Found: " + roots.join(", "));
+  }
+  const bomCandidates = entries.filter(entry => entry.path === tag + "/" + tag + ".xls" || entry.path === tag + "/" + tag + ".xlsx");
+  if (bomCandidates.length !== 1) throw new Error("Expected exactly one " + tag + ".xls or " + tag + ".xlsx directly inside the fixture folder.");
+  const pdfCandidates = entries.filter(entry => entry.path === tag + "/" + tag + ".pdf");
+  if (pdfCandidates.length !== 1) throw new Error("Expected drawing file " + tag + ".pdf directly inside the fixture folder.");
+  const lowerDxfFolder = entries.some(entry => entry.path.split("/")[1] === "dxf");
+  if (lowerDxfFolder) throw new Error("The DXF subfolder must be named exactly DXF in uppercase.");
+  const dxfEntries = entries.filter(entry => {
+    const parts = entry.path.split("/");
+    return parts.length === 3 && parts[0] === tag && parts[1] === "DXF" && /\\.dxf$/i.test(parts[2]);
+  });
+  if (!dxfEntries.length) throw new Error("No DXF files found. Expected files directly inside " + tag + "/DXF/.");
+  button.disabled = true;
+  status.textContent = "Reading the SolidWorks BOM and discovering DXF filenames…";
+  status.className = "status-text";
+  $("buildComponentTreeBtn").disabled = true;
+  try {
+    const bomFile = bomCandidates[0].file;
+    const bomResponse = await fetch("/api/import-solidworks-bom", {
+      method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: bomFile
+    });
+    const bomResult = await bomResponse.json();
+    if (!bomResponse.ok) throw new Error(bomResult.error || "SolidWorks BOM import failed.");
+    const dxfNames = dxfEntries.map(entry => entry.path.split("/").pop());
+    const dxfResponse = await fetch("/api/parse-dxf-list", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filenames: dxfNames.join("\n") })
+    });
+    const dxfResult = await dxfResponse.json();
+    if (!dxfResponse.ok) throw new Error(dxfResult.error || "DXF filename parsing failed.");
+    let pdfResult = { text: "", pageCount: 0 };
+    let pdfWarning = "";
+    try { pdfResult = await extractDrawingPdfText(pdfCandidates[0].file); }
+    catch (error) { pdfWarning = " PDF text extraction was unavailable (" + error.message + "); the drawing remains identified as a source reference."; }
+    loadFixture(tag);
+    bomLines = bomResult.components.map(line => ({ ...line, manual: false }));
+    dxfFiles = dxfResult.components;
+    drawingText = pdfResult.text;
+    $("dxfInput").value = dxfNames.join("\n");
+    rebuildComponents();
+    fixtureData[tag].bomGenerated = false;
+    fixtureData[tag].generatedAt = "";
+    fixtureData[tag].includeInLaser = true;
+    fixtureData[tag].sourceFiles = {
+      fixtureFolder: tag, drawingPdf: pdfCandidates[0].path,
+      solidworksBom: bomCandidates[0].path, dxfFolder: tag + "/DXF/",
+      dxfFilenames: dxfEntries.map(entry => entry.path)
+    };
+    fixtureData[tag].drawingText = drawingText;
+    saveCurrentFixture();
+    $("bomStatus").textContent = bomResult.count + " BOM item(s) read from " + bomCandidates[0].path + ".";
+    $("bomStatus").className = "ok";
+    $("parseStatus").textContent = dxfFiles.length + " DXF filenames read from " + tag + "/DXF/. DXF file contents were not uploaded.";
+    $("parseStatus").className = "ok";
+    $("fixtureSourcePaths").textContent = "Sources: PDF " + pdfCandidates[0].path + " · BOM " + bomCandidates[0].path + " · DXF " + tag + "/DXF/ (" + dxfEntries.length + " filenames).";
+    $("drawingTextPreview").value = drawingText || "No extractable text layer was found. The PDF remains available as a local source file during this folder selection.";
+    $("drawingTextDetails").hidden = false;
+    status.textContent = "Folder validated. BOM: " + bomResult.count + " rows; DXF filenames: " + dxfEntries.length + "; PDF pages: " + (pdfResult.pageCount || "not extracted") + "." + pdfWarning;
+    status.className = pdfWarning ? "status-text" : "ok";
+    $("folderImportReview").textContent = "Source files have been read and filename matching is complete. Click Build BOM Component Tree View to review the matches.";
+    $("buildComponentTreeBtn").disabled = false;
+    $("componentTreePanel").hidden = true;
+    renderSummary();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$("importFixtureFolderBtn").addEventListener("click", async () => {
+  try { await importFixtureFolder(); }
+  catch (error) {
+    $("fixtureFolderStatus").textContent = error.message;
+    $("fixtureFolderStatus").className = "error";
+  }
+});
+
+$("buildComponentTreeBtn").addEventListener("click", () => {
+  if (!components.length) return;
+  $("componentTreePanel").hidden = false;
+  renderComponents();
+  $("folderImportReview").textContent = "BOM Component Tree View is ready. Verify all matches and engineering data before generating the Excel BOM.";
+  $("folderImportReview").className = "ok";
+  $("componentTreePanel").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+$("summaryRows").addEventListener("change", event => {
+  const checkbox = event.target.closest("[data-laser-include]");
+  if (!checkbox) return;
+  const tag = checkbox.dataset.laserInclude;
+  if (!fixtureData[tag]) return;
+  fixtureData[tag].includeInLaser = checkbox.checked;
+  $("summaryStatus").textContent = tag + (checkbox.checked ? " included in" : " excluded from") + " the next Laser Order Request preview.";
+  $("summaryStatus").className = "ok";
+});
+
 $("componentRows").addEventListener("change", event => {
   const select = event.target.closest("[data-dxf-select]");
   if (!select) return;
@@ -641,8 +775,10 @@ $("addRowBtn").addEventListener("click", () => {
 });
 
 $("generateSummaryBtn").addEventListener("click", () => {
+  saveCurrentFixture();
   renderSummary();
-  $("summaryStatus").textContent = schedule.length + " schedule fixture(s) displayed. BOM item counts are shown where imported.";
+  const count = schedule.filter(item => fixtureData[item.tag]?.bomGenerated).length;
+  $("summaryStatus").textContent = count + " generated fixture BOM(s) listed. Use the checkboxes to choose which ones feed the Laser Order Request.";
   $("summaryStatus").className = "ok";
 });
 
@@ -693,6 +829,14 @@ $("exportBtn").addEventListener("click", async () => {
     URL.revokeObjectURL(url);
 
     const missing = components.filter(component => !String(component.description || "").trim()).length;
+    fixtureData[currentFixtureTag] = fixtureData[currentFixtureTag] || {};
+    fixtureData[currentFixtureTag].bomGenerated = true;
+    fixtureData[currentFixtureTag].generatedAt = new Date().toISOString();
+    fixtureData[currentFixtureTag].includeInLaser = fixtureData[currentFixtureTag].includeInLaser !== false;
+    saveCurrentFixture();
+    renderSummary();
+    $("summaryStatus").textContent = currentFixtureTag + " BOM Excel generated and marked complete.";
+    $("summaryStatus").className = "ok";
     $("parseStatus").textContent = "Excel BOM generated. " +
       (missing ? missing + " description(s) are blank; review the workbook before release." : "All manufacturing descriptions are populated.");
     $("parseStatus").className = missing ? "status-text" : "ok";
@@ -710,7 +854,7 @@ function collectProjectBomData() {
   const fixtures = [];
   for (const item of schedule) {
     const saved = fixtureData[item.tag];
-    if (!saved || !Array.isArray(saved.components) || !saved.components.length) continue;
+    if (!saved || !saved.bomGenerated || saved.includeInLaser === false || !Array.isArray(saved.components) || !saved.components.length) continue;
     fixtures.push({
       fixtureTag: item.tag,
       fixtureQuantity: item.qty,
@@ -770,7 +914,7 @@ function renderCuttingListPreview() {
   ).join("") : '<tr><td colspan="7" class="empty">No matched DXF components found in the saved fixture BOMs.</td></tr>';
   $("exportCuttingListBtn").disabled = cuttingListPreview.length === 0;
   $("cuttingListStatus").textContent = cuttingListPreview.length + " consolidated DXF line(s) from " +
-    fixtures.length + " fixture BOM(s). " + noDxfCount + " BOM component(s) without DXF were excluded.";
+    fixtures.length + " selected, generated fixture BOM(s). " + noDxfCount + " BOM component(s) without DXF were excluded.";
   $("cuttingListStatus").className = cuttingListPreview.length ? "ok" : "status-text";
 }
 
