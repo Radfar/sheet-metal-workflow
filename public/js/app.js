@@ -756,6 +756,8 @@ $("summaryRows").addEventListener("change", event => {
       $("cuttingListStatus").className = "error";
       $("exportCuttingListBtn").disabled = true;
     }
+  } else {
+    updateLaserOrderButtonState();
   }
 });
 
