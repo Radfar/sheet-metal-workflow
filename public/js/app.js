@@ -1050,10 +1050,8 @@ function normalizeCommonDxfFilename(filename, fixtureTag) {
   const name = String(filename || "").trim().toLowerCase();
   const tag = String(fixtureTag || "").trim().toLowerCase();
   if (!name || !tag) return name;
-  const escaped = tag.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\function renderCuttingListPreview() {");
-  return name.replace(new RegExp("(^|[^a-z0-9])" + escaped + "(?=[^a-z0-9]|$)", "i"), "$1");
+  return name.replace(new RegExp("(^|[^a-z0-9])" + tag + "(?=[^a-z0-9]|$)", "i"), "$1");
 }
-
 function renderCuttingListPreview() {
   const fixtures = collectProjectBomData();
   const groups = new Map();
