@@ -403,8 +403,12 @@ function loadFixture(tag) {
     $("fixtureFolderStatus").className = source ? "ok" : "status-text";
   }
   if ($("folderBomDxfCheck") && $("folderPdfCheck")) {
-    if (source && bomLines.length && dxfFiles.length) {
-      setFolderValidation({ bomDxf: true, pdf: Boolean(source.drawingPdf), pdfText: Boolean(drawingText) });
+    if (source && source.solidworksBom && source.dxfFilenames?.length) {
+      setFolderValidation({
+        bomDxf: true,
+        pdf: Boolean(source.drawingPdf),
+        pdfText: Boolean(saved?.drawingText)
+      });
     } else {
       resetFolderValidation();
     }
