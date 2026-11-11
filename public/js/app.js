@@ -216,7 +216,11 @@ function rebuildComponents() {
     let description = String(line.description || "").trim();
     let descriptionDraft = Boolean(line.descriptionDraft);
 
-    if (!description && dxfIndex !== "") {
+    // Auto-generated descriptions are derived from the DXF match. If the
+    // match changes, refresh an existing auto-draft so a previous incorrect
+    // association cannot survive into the exported BOM. Manual descriptions
+    // (descriptionDraft === false) are preserved.
+    if (dxfIndex !== "" && (!description || descriptionDraft)) {
       description = makeDraftDescription(line.partNumber, dxfFiles[Number(dxfIndex)]);
       descriptionDraft = Boolean(description);
       if (descriptionDraft) {
@@ -832,7 +836,10 @@ $("componentRows").addEventListener("change", event => {
     if (!components[index].flatPatternHeight) components[index].flatPatternHeight = selectedDxf.flatHeight || "";
     if (!components[index].materialCode) components[index].materialCode = selectedDxf.materialCode || "";
   }
-  if (!String(components[index].description || "").trim() && components[index].dxfIndex !== "") {
+  if (components[index].dxfIndex !== "" && (
+    !String(components[index].description || "").trim() ||
+    components[index].descriptionDraft
+  )) {
     const draft = makeDraftDescription(components[index].partNumber, dxfFiles[components[index].dxfIndex]);
     if (draft) {
       components[index].description = draft;
