@@ -673,6 +673,21 @@ async function importFixtureFolder() {
     const bomResult = await bomResponse.json();
     if (!bomResponse.ok) throw new Error(bomResult.error || "SolidWorks BOM import failed.");
     const dxfNames = dxfEntries.map(entry => entry.path.split("/").pop());
+    let dxfHashes = [];
+    let hashWarning = "";
+    if (window.crypto?.subtle) {
+      try {
+        dxfHashes = await Promise.all(dxfEntries.map(async entry => {
+          const bytes = await entry.file.arrayBuffer();
+          const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+          return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+        }));
+      } catch (error) {
+        hashWarning = " DXF fingerprinting was unavailable (" + error.message + "); common-part detection will rely on explicit identities only.";
+      }
+    } else {
+      hashWarning = " Secure browser hashing is unavailable; common-part detection will rely on explicit identities only.";
+    }
     const dxfResponse = await fetch("/api/parse-dxf-list", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filenames: dxfNames.join("\n") })
@@ -685,7 +700,7 @@ async function importFixtureFolder() {
     catch (error) { pdfWarning = " PDF text extraction was unavailable (" + error.message + "); the drawing remains identified as a source reference."; }
     loadFixture(tag);
     bomLines = bomResult.components.map(line => ({ ...line, manual: false }));
-    dxfFiles = dxfResult.components;
+    dxfFiles = dxfResult.components.map((component, index) => ({ ...component, sha256: dxfHashes[index] || "" }));
     drawingText = pdfResult.text;
     $("dxfInput").value = dxfNames.join("\n");
     rebuildComponents();
@@ -708,7 +723,7 @@ async function importFixtureFolder() {
     $("dxfFilenameDetails").hidden = false;
     $("drawingTextPreview").value = drawingText || "No extractable text layer was found. The PDF remains available as a local source file during this folder selection.";
     $("drawingTextDetails").hidden = false;
-    status.textContent = "Folder validated. BOM: " + bomResult.count + " rows; DXF filenames: " + dxfEntries.length + "; PDF pages: " + (pdfResult.pageCount || "not extracted") + "." + pdfWarning;
+    status.textContent = "Folder validated. BOM: " + bomResult.count + " rows; DXF filenames: " + dxfEntries.length + "; PDF pages: " + (pdfResult.pageCount || "not extracted") + "." + pdfWarning + hashWarning;
     status.className = pdfWarning ? "status-text" : "ok";
     const unmatchedCount = components.filter(component => component.dxfIndex === "").length;
     $("folderImportReview").textContent = "Source files have been read. " + (components.length - unmatchedCount) +
@@ -969,7 +984,7 @@ function collectProjectBomData() {
           materialGrade: component.materialGrade || "",
           gauge: component.gauge || "",
           cuttingListFinish: component.cuttingListFinish || "",
-          dxf: dxf ? { originalFilename: dxf.originalFilename, fixtureTag: dxf.fixtureTag, consolidationKey: component.cuttingListIdentity || "", outputFilename: component.cuttingListIdentity || dxf.originalFilename } : null
+          dxf: dxf ? { originalFilename: dxf.originalFilename, fixtureTag: dxf.fixtureTag, sha256: dxf.sha256 || "", consolidationKey: component.cuttingListIdentity || "", outputFilename: component.cuttingListIdentity || dxf.originalFilename } : null
         };
       })
     });
@@ -981,18 +996,33 @@ let cuttingListPreview = [];
 function renderCuttingListPreview() {
   const fixtures = collectProjectBomData();
   const groups = new Map();
+  const hashFixtureMap = new Map();
+  for (const fixture of fixtures) {
+    for (const component of fixture.components) {
+      const hash = component.dxf?.sha256;
+      if (!hash) continue;
+      if (!hashFixtureMap.has(hash)) hashFixtureMap.set(hash, new Set());
+      hashFixtureMap.get(hash).add(fixture.fixtureTag);
+    }
+  }
+  const commonHashes = new Set([...hashFixtureMap.entries()].filter(([, tags]) => tags.size > 1).map(([hash]) => hash));
   let noDxfCount = 0;
   for (const fixture of fixtures) {
     for (const component of fixture.components) {
       if (!component.dxf) { noDxfCount++; continue; }
-      const key = [String(component.dxf.consolidationKey || component.dxf.originalFilename).toLowerCase(), String(component.materialCode || "").toUpperCase(), String(component.materialGrade || "").toUpperCase(), String(component.gauge || "").toUpperCase(), String(component.cuttingListFinish || "").toUpperCase()].join("|");
+      const hashCommon = Boolean(component.dxf.sha256 && commonHashes.has(component.dxf.sha256));
+      const isCommon = Boolean(component.dxf.consolidationKey) || String(component.dxf.fixtureTag || "").toUpperCase() === "COMMON" || hashCommon;
+      const dxfIdentity = component.dxf.consolidationKey
+        ? "approved:" + component.dxf.consolidationKey.toLowerCase()
+        : hashCommon ? "sha256:" + component.dxf.sha256 : component.dxf.originalFilename.toLowerCase();
+      const key = [dxfIdentity, String(component.materialCode || "").toUpperCase(), String(component.materialGrade || "").toUpperCase(), String(component.gauge || "").toUpperCase(), String(component.cuttingListFinish || "").toUpperCase()].join("|");
       if (!groups.has(key)) groups.set(key, {
         dxfFilename: component.dxf.outputFilename || component.dxf.originalFilename,
         material: component.materialGrade || component.materialCode || "",
         thickness: component.gauge || "",
         finish: component.cuttingListFinish || "",
         quantity: 0,
-        common: Boolean(component.dxf.consolidationKey) || String(component.dxf.fixtureTag || "").toUpperCase() === "COMMON",
+        common: isCommon,
         sources: new Set()
       });
       const entry = groups.get(key);
@@ -1009,13 +1039,15 @@ function renderCuttingListPreview() {
     Number(b.common) - Number(a.common) || a.material.localeCompare(b.material) ||
     a.thickness.localeCompare(b.thickness) || a.dxfFilename.localeCompare(b.dxfFilename)
   );
-  $("cuttingListRows").innerHTML = cuttingListPreview.length ? cuttingListPreview.map(line =>
-    "<tr><td>" + esc(line.dxfFilename) + "</td><td>" + esc(line.material || "—") +
-    "</td><td>" + esc(line.thickness || "—") + "</td><td>" + esc(line.quantity) +
-    "</td><td>" + esc(line.finish || "—") + "</td><td>PC</td><td>" + esc([...line.sources].join(", ")) + "</td></tr>"
-  ).join("") : '<tr><td colspan="7" class="empty">No matched DXF components found in the saved fixture BOMs.</td></tr>';
+  $("cuttingListRows").innerHTML = cuttingListPreview.length ? cuttingListPreview.map(line => {
+    const section = line.common ? "COMMON PARTS" : (line.material || "MATERIAL NOT SPECIFIED") + " / " + (line.thickness || "THICKNESS NOT SPECIFIED");
+    return "<tr><td>" + esc(line.dxfFilename) + "</td><td>" + esc(section) + "</td><td>" + esc(line.material || "—") +
+      "</td><td>" + esc(line.thickness || "—") + "</td><td>" + esc(line.quantity) +
+      "</td><td>" + esc(line.finish || "—") + "</td><td>PC</td><td>" + esc([...line.sources].join(", ")) + "</td></tr>";
+  }).join("") : '<tr><td colspan="8" class="empty">No matched DXF components found in the saved fixture BOMs.</td></tr>';
   $("exportCuttingListBtn").disabled = !fixtures.length || cuttingListPreview.length === 0;
-  $("cuttingListStatus").textContent = cuttingListPreview.length + " consolidated DXF line(s) from " +
+  const commonLineCount = cuttingListPreview.filter(line => line.common).length;
+  $("cuttingListStatus").textContent = cuttingListPreview.length + " consolidated DXF line(s), including " + commonLineCount + " common line(s), from " +
     fixtures.length + " selected, generated fixture BOM(s). " + noDxfCount + " BOM component(s) without DXF were excluded.";
   $("cuttingListStatus").className = cuttingListPreview.length ? "ok" : "status-text";
 }
