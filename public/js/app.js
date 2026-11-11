@@ -402,6 +402,13 @@ function loadFixture(tag) {
     $("fixtureFolderStatus").textContent = source ? "Previously imported source folder: " + source.fixtureFolder : "Select the current fixture folder.";
     $("fixtureFolderStatus").className = source ? "ok" : "status-text";
   }
+  if ($("folderBomDxfCheck") && $("folderPdfCheck")) {
+    if (source && bomLines.length && dxfFiles.length) {
+      setFolderValidation({ bomDxf: true, pdf: Boolean(source.drawingPdf), pdfText: Boolean(drawingText) });
+    } else {
+      resetFolderValidation();
+    }
+  }
   bomLines = saved ? clone(saved.bomLines) : [];
   dxfFiles = saved ? clone(saved.dxfFiles) : [];
   components = saved ? clone(saved.components) : [];
@@ -653,11 +660,33 @@ async function readSelectedDirectory(handle) {
   return entries;
 }
 
+function resetFolderValidation(message = "Select the current fixture folder.") {
+  $("folderBomDxfCheck").className = "folder-check pending";
+  $("folderPdfCheck").className = "folder-check pending";
+  $("folderBomDxfCheck").querySelector("span").textContent = "SolidWorks BOM and DXF files discovered from the selected folder";
+  $("folderPdfCheck").querySelector("span").textContent = "Drawing PDF loaded — extracted text is reference only";
+  $("folderImportReview").textContent = message;
+  $("folderImportReview").className = "status-text";
+  $("buildComponentTreeBtn").disabled = true;
+}
+
+function setFolderValidation({ bomDxf = false, pdf = false, pdfText = false } = {}) {
+  $("folderBomDxfCheck").className = "folder-check " + (bomDxf ? "ok" : "pending");
+  $("folderPdfCheck").className = "folder-check " + (pdf ? "ok" : "pending");
+  $("folderBomDxfCheck").querySelector("span").textContent = bomDxf
+    ? "SolidWorks BOM and DXF files discovered from the selected folder"
+    : "SolidWorks BOM and DXF files not yet validated";
+  $("folderPdfCheck").querySelector("span").textContent = pdf
+    ? (pdfText ? "Drawing PDF loaded and text extracted — reference only" : "Drawing PDF loaded — text extraction unavailable; reference only")
+    : "Drawing PDF not yet validated";
+}
+
 $("chooseFixtureFolderBtn").addEventListener("click", async () => {
   if (!("showDirectoryPicker" in window)) {
     $("fixtureFolderInput").click();
     return;
   }
+  resetFolderValidation("Selecting and reading the fixture folder…");
   try {
     const handle = await window.showDirectoryPicker({ mode: "read" });
     selectedFixtureFolderEntries = await readSelectedDirectory(handle);
@@ -665,15 +694,17 @@ $("chooseFixtureFolderBtn").addEventListener("click", async () => {
     $("fixtureFolderStatus").textContent = "Selected folder: " + handle.name + " (" +
       selectedFixtureFolderEntries.filter(entry => entry.file).length + " files discovered locally).";
     $("fixtureFolderStatus").className = "status-text";
+    await importFixtureFolder();
   } catch (error) {
     if (error.name !== "AbortError") {
       $("fixtureFolderStatus").textContent = "Could not read the selected folder: " + error.message;
       $("fixtureFolderStatus").className = "error";
+      resetFolderValidation("Folder validation failed. Choose the correct fixture folder.");
     }
   }
 });
 
-$("fixtureFolderInput").addEventListener("change", () => {
+$("fixtureFolderInput").addEventListener("change", async () => {
   selectedFixtureFolderEntries = null;
   selectedFixtureFolderName = "";
   const files = Array.from($("fixtureFolderInput").files || []);
@@ -681,13 +712,24 @@ $("fixtureFolderInput").addEventListener("change", () => {
     ? "Selected folder: " + (files[0].webkitRelativePath || files[0].name).split("/")[0] + " (" + files.length + " files)."
     : "Select the current fixture folder.";
   $("fixtureFolderStatus").className = "status-text";
+  if (!files.length) {
+    resetFolderValidation();
+    return;
+  }
+  resetFolderValidation("Reading the selected fixture folder…");
+  try {
+    await importFixtureFolder();
+  } catch (error) {
+    $("fixtureFolderStatus").textContent = error.message;
+    $("fixtureFolderStatus").className = "error";
+    resetFolderValidation("Folder validation failed. Choose the correct fixture folder.");
+  }
 });
 
 async function importFixtureFolder() {
   const selected = selectedFixtureFolderEntries || Array.from($("fixtureFolderInput").files || []);
   const tag = $("fixtureSelect").value;
   const status = $("fixtureFolderStatus");
-  const button = $("importFixtureFolderBtn");
   if (!selected.length) throw new Error("Select the fixture folder first.");
   if (!tag) throw new Error("Select a fixture tag from the project schedule.");
   const entries = selected.map(entry => entry && entry.path
@@ -710,7 +752,6 @@ async function importFixtureFolder() {
     return parts.length === 3 && parts[0] === tag && parts[1] === "DXF" && /\.dxf$/i.test(parts[2]);
   }).sort((left, right) => left.path.localeCompare(right.path));
   if (!dxfEntries.length) throw new Error("No DXF files found. Expected files directly inside " + tag + "/DXF/.");
-  button.disabled = true;
   status.textContent = "Reading the SolidWorks BOM and discovering DXF filenames…";
   status.className = "status-text";
   $("buildComponentTreeBtn").disabled = true;
@@ -775,29 +816,21 @@ async function importFixtureFolder() {
     status.textContent = "Folder validated. BOM: " + bomResult.count + " rows; DXF filenames: " + dxfEntries.length + "; PDF pages: " + (pdfResult.pageCount || "not extracted") + "." + pdfWarning + hashWarning;
     status.className = pdfWarning ? "status-text" : "ok";
     const unmatchedCount = components.filter(component => component.dxfIndex === "").length;
-    $("folderImportReview").textContent = "Source files have been read. " + (components.length - unmatchedCount) +
-      " BOM item(s) matched automatically; " + unmatchedCount + " remain unmatched for review. Click Build BOM Component Tree View.";
+    setFolderValidation({ bomDxf: true, pdf: true, pdfText: Boolean(drawingText) });
+    $("folderImportReview").textContent = "Source files validated. " + (components.length - unmatchedCount) +
+      " BOM item(s) matched automatically; " + unmatchedCount + " remain unmatched for review. Build the BOM Component Tree View when ready.";
+    $("folderImportReview").className = "ok";
     $("buildComponentTreeBtn").disabled = false;
     $("componentTreePanel").hidden = true;
     renderSummary();
     selectedFixtureFolderEntries = null;
     selectedFixtureFolderName = "";
     $("fixtureFolderInput").value = "";
-  } finally {
-    button.disabled = false;
   }
 }
 
-$("importFixtureFolderBtn").addEventListener("click", async () => {
-  try { await importFixtureFolder(); }
-  catch (error) {
-    $("fixtureFolderStatus").textContent = error.message;
-    $("fixtureFolderStatus").className = "error";
-  }
-});
-
 $("buildComponentTreeBtn").addEventListener("click", () => {
-  if (!components.length) return;
+  if (!components.length || $("buildComponentTreeBtn").disabled) return;
   $("componentTreePanel").hidden = false;
   renderComponents();
   $("folderImportReview").textContent = "BOM Component Tree View is ready. Verify all matches and engineering data before generating the Excel BOM.";
@@ -1046,12 +1079,6 @@ function collectProjectBomData() {
 }
 
 let cuttingListPreview = [];
-function normalizeCommonDxfFilename(filename, fixtureTag) {
-  const name = String(filename || "").trim().toLowerCase();
-  const tag = String(fixtureTag || "").trim().toLowerCase();
-  if (!name || !tag) return name;
-  return name.replace(new RegExp("(^|[^a-z0-9])" + tag + "(?=[^a-z0-9]|$)", "i"), "$1");
-}
 function renderCuttingListPreview() {
   const fixtures = collectProjectBomData();
   const groups = new Map();
@@ -1065,35 +1092,17 @@ function renderCuttingListPreview() {
     }
   }
   const commonHashes = new Set([...hashFixtureMap.entries()].filter(([, tags]) => tags.size > 1).map(([hash]) => hash));
-  const commonFilenameMap = new Map();
-  for (const fixture of fixtures) {
-    const fixtureTag = String(fixture.fixtureTag || "").trim();
-    for (const component of fixture.components) {
-      const dxf = component.dxf;
-      if (!dxf) continue;
-      const commonKey = normalizeCommonDxfFilename(dxf.originalFilename, fixtureTag);
-      if (!commonFilenameMap.has(commonKey)) commonFilenameMap.set(commonKey, new Set());
-      commonFilenameMap.get(commonKey).add(fixtureTag.toUpperCase());
-    }
-  }
-  const commonFilenameKeys = new Set([...commonFilenameMap.entries()]
-    .filter(([, tags]) => tags.size > 1)
-    .map(([key]) => key));
   let noDxfCount = 0;
   for (const fixture of fixtures) {
     for (const component of fixture.components) {
       if (!component.dxf) { noDxfCount++; continue; }
       const hashCommon = Boolean(component.dxf.sha256 && commonHashes.has(component.dxf.sha256));
-      const commonFilenameKey = normalizeCommonDxfFilename(component.dxf.originalFilename, fixture.fixtureTag);
-      const filenameCommon = commonFilenameKeys.has(commonFilenameKey);
       const isCommon = Boolean(component.dxf.consolidationKey) ||
         String(component.dxf.fixtureTag || "").toUpperCase() === "COMMON" ||
-        hashCommon ||
-        filenameCommon;
+        hashCommon;
       const dxfIdentity = component.dxf.consolidationKey
         ? "approved:" + component.dxf.consolidationKey.toLowerCase()
         : hashCommon ? "sha256:" + component.dxf.sha256
-        : filenameCommon ? "common-filename:" + commonFilenameKey
         : component.dxf.originalFilename.toLowerCase();
       const materialCode = String(component.materialCode || component.dxf.materialCode || "").toUpperCase();
       const material = component.materialGrade || (materialCode === "C11" || materialCode === "C16" ? "CRS" : "");
