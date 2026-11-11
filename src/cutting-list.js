@@ -47,12 +47,6 @@ function formatOrderShipRange(orderDate, shipDate) {
     : startLabel + ", " + String(start.year).slice(-2) + "-" + endLabel + ", " + String(end.year).slice(-2);
 }
 
-function normalizeCommonDxfFilename(filename, fixtureTag) {
-  const name = clean(filename || "").trim().toLowerCase();
-  const tag = clean(fixtureTag || "").trim().toLowerCase();
-  if (!name || !tag) return name;
-  return name.replace(new RegExp("(^|[^a-z0-9])" + tag + "(?=[^a-z0-9]|$)", "i"), "$1");
-}
 function classifyMaterial(component, dxf, fixture) {
   const code = clean(component.materialCode || dxf.materialCode).toUpperCase();
   const material = clean(component.materialGrade) || (code === "C11" || code === "C16" ? "CRS" : "");
