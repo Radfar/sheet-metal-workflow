@@ -22,6 +22,11 @@ function monthName(month) {
   return ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][month - 1];
 }
 
+function excelDate(value) {
+  const parts = dateParts(value);
+  return parts ? new Date(parts.year, parts.month - 1, parts.day, 12, 0, 0) : null;
+}
+
 function formatOrderShipRange(orderDate, shipDate) {
   const start = dateParts(orderDate);
   const end = dateParts(shipDate);
@@ -198,14 +203,18 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
   const headerValues = {
     "C3": "CUSTOMER:", "D3": clean(payload.customer),
-    "H3": "DATE:", "I3": clean(payload.orderDate),
+    "H3": "DATE:",
     "I2": "ORDER #:",
     "C4": "STORE #:", "D4": clean(payload.storeNumber),
     "H4": "REQUESTED BY:", "I4": clean(payload.requestedBy),
     "C5": "PO #:", "D5": clean(payload.poNumber),
-    "H5": "SHIP DATE:", "I5": clean(payload.shipDate)
+    "H5": "SHIP DATE:"
   };
   for (const [address, value] of Object.entries(headerValues)) ws.getCell(address).value = value;
+  ws.getCell("I3").value = excelDate(payload.orderDate) || clean(payload.orderDate);
+  ws.getCell("I3").numFmt = "mmmm d, yyyy";
+  ws.getCell("I5").value = excelDate(payload.shipDate) || clean(payload.shipDate);
+  ws.getCell("I5").numFmt = "mmmm d, yyyy";
   ws.getCell("J2").value = clean(payload.orderNumber);
 
   for (const address of ["I2","C3","H3","C4","H4","C5","H5"]) {
