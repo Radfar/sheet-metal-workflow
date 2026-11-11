@@ -765,8 +765,8 @@ function renderCuttingListPreview() {
   $("cuttingListRows").innerHTML = cuttingListPreview.length ? cuttingListPreview.map(line =>
     "<tr><td>" + esc(line.dxfFilename) + "</td><td>" + esc(line.material || "—") +
     "</td><td>" + esc(line.thickness || "—") + "</td><td>" + esc(line.quantity) +
-    "</td><td>" + esc(line.finish || "—") + "</td><td>" + esc([...line.sources].join(", ")) + "</td></tr>"
-  ).join("") : '<tr><td colspan="6" class="empty">No matched DXF components found in the saved fixture BOMs.</td></tr>';
+    "</td><td>" + esc(line.finish || "—") + "</td><td>PC</td><td>" + esc([...line.sources].join(", ")) + "</td></tr>"
+  ).join("") : '<tr><td colspan="7" class="empty">No matched DXF components found in the saved fixture BOMs.</td></tr>';
   $("exportCuttingListBtn").disabled = cuttingListPreview.length === 0;
   $("cuttingListStatus").textContent = cuttingListPreview.length + " consolidated DXF line(s) from " +
     fixtures.length + " fixture BOM(s). " + noDxfCount + " BOM component(s) without DXF were excluded.";
