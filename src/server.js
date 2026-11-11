@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
 import { parseDxfList } from "./parser.js";
+import { buildCuttingListWorkbook } from "./cutting-list.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -488,6 +489,22 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
   } catch (error) {
     console.error("BOM XLSX export failed:", error);
     if (!res.headersSent) res.status(500).json({ error: "Could not generate the Excel BOM." });
+  }
+});
+
+
+app.post("/api/export-cutting-list-xlsx", async (req, res) => {
+  try {
+    const result = await buildCuttingListWorkbook(req.body || {});
+    const safe = value => String(value || "").replace(/[<>:"/\\\\|?*\\x00-\\x1F]/g, "").replace(/\\s+/g, " ").trim();
+    const filename = "Laser Order Request - " + (safe(req.body?.orderNumber) || "TBD") + " - " + (safe(req.body?.projectName) || "Project") + ".xlsx";
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", 'attachment; filename="' + filename + '"');
+    res.setHeader("X-Cutting-List-Lines", String(result.lineCount));
+    await res.send(result.buffer);
+  } catch (error) {
+    console.error("Cutting list export failed:", error);
+    res.status(400).json({ error: error.message || "Could not generate the Laser Order Request." });
   }
 });
 
