@@ -70,27 +70,60 @@ function normalizePart(value, fixtureTag) {
   return text.replace(/[^A-Z0-9]/g, "");
 }
 
+function normalizePartTokens(value, fixtureTag) {
+  let text = String(value || "").toUpperCase().trim();
+  if (fixtureTag && text.startsWith(fixtureTag.toUpperCase())) {
+    text = text.slice(fixtureTag.length);
+  }
+  text = text.replace(/REMOVABLE[\s_-]*GUSSET/g, "GUS");
+  text = text.replace(/\bTROUGH\b/g, "");
+  return text
+    .split(/[^A-Z0-9]+/)
+    .map(token => token.trim())
+    .filter(Boolean);
+}
+
 function matchDxfIndex(partNumber, files, fixtureTag) {
   const target = normalizePart(partNumber, fixtureTag);
-  if (!target) return "";
+  const targetTokens = normalizePartTokens(partNumber, fixtureTag);
+  if (!target || !targetTokens.length) return "";
+
   let bestIndex = -1;
   let bestScore = 0;
 
   files.forEach((file, index) => {
     const candidate = normalizePart(file.componentLabel, fixtureTag);
-    if (!candidate) return;
+    const candidateTokens = normalizePartTokens(file.componentLabel, fixtureTag);
+    if (!candidate || !candidateTokens.length) return;
+
     let score = 0;
-    if (candidate === target) score = 100;
-    else if (candidate.startsWith(target) || target.startsWith(candidate)) score = 80;
-    else if (candidate.includes(target) || target.includes(candidate)) score = 60;
+
+    // Exact normalized identity remains the strongest match.
+    if (candidate === target) {
+      score = 100;
+    // A BOM part such as T01A-A must match the first meaningful DXF suffix
+    // token A, not a different token such as ANG from "ANG 1".
+    } else if (
+      candidateTokens.length >= targetTokens.length &&
+      targetTokens.every((token, tokenIndex) => candidateTokens[tokenIndex] === token)
+    ) {
+      score = 95;
+    // Preserve useful legacy matching for multi-token names, but only after
+    // token-prefix matching has been considered.
+    } else if (candidate.startsWith(target) || target.startsWith(candidate)) {
+      score = 70;
+    } else if (candidate.includes(target) || target.includes(candidate)) {
+      score = 50;
+    }
+
     if (score > bestScore) {
       bestScore = score;
       bestIndex = index;
     }
   });
-  return bestScore >= 60 ? bestIndex : "";
-}
 
+  return bestScore >= 70 ? bestIndex : "";
+}
 function makeDraftDescription(partNumber, dxf) {
   if (!dxf) return "";
   const label = String(dxf.componentLabel || partNumber || "").toUpperCase();
