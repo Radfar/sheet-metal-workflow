@@ -28,7 +28,7 @@ export async function buildCuttingListWorkbook(payload = {}) {
       const thickness = clean(component.gauge);
       const finish = clean(component.cuttingListFinish);
       // Exact DXF filename is the default identity. An explicit approved common identity may override it.
-      const identity = [clean(dxf.consolidationKey || dxf.originalFilename).toLowerCase(), material.toUpperCase(), thickness.toUpperCase(), finish.toUpperCase()].join("|");
+      const identity = [clean(dxf.consolidationKey || dxf.originalFilename).toLowerCase(), clean(component.materialCode).toUpperCase(), material.toUpperCase(), thickness.toUpperCase(), finish.toUpperCase()].join("|");
       const key = identity;
       if (!grouped.has(key)) {
         grouped.set(key, {
