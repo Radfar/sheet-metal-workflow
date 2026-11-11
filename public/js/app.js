@@ -701,6 +701,129 @@ $("exportBtn").addEventListener("click", async () => {
   }
 });
 
+
+function collectProjectBomData() {
+  saveCurrentFixture();
+  const fixtures = [];
+  for (const item of schedule) {
+    const saved = fixtureData[item.tag];
+    if (!saved || !Array.isArray(saved.components) || !saved.components.length) continue;
+    fixtures.push({
+      fixtureTag: item.tag,
+      fixtureQuantity: item.qty,
+      finish: item.finish,
+      components: saved.components.map(component => {
+        const dxf = component.dxfIndex === "" || component.dxfIndex == null
+          ? null : saved.dxfFiles?.[Number(component.dxfIndex)];
+        return {
+          partNumber: component.partNumber,
+          quantityPerAssembly: component.quantityPerAssembly,
+          materialCode: component.materialCode || dxf?.materialCode || "",
+          materialGrade: component.materialGrade || "",
+          gauge: component.gauge || "",
+          dxf: dxf ? { originalFilename: dxf.originalFilename, fixtureTag: dxf.fixtureTag } : null
+        };
+      })
+    });
+  }
+  return fixtures;
+}
+
+let cuttingListPreview = [];
+function renderCuttingListPreview() {
+  const fixtures = collectProjectBomData();
+  const groups = new Map();
+  let noDxfCount = 0;
+  for (const fixture of fixtures) {
+    for (const component of fixture.components) {
+      if (!component.dxf) { noDxfCount++; continue; }
+      const key = [component.dxf.originalFilename.toLowerCase(), component.materialGrade.toUpperCase(), component.gauge.toUpperCase(), fixture.finish.toUpperCase()].join("|");
+      if (!groups.has(key)) groups.set(key, {
+        dxfFilename: component.dxf.originalFilename,
+        material: component.materialGrade || component.materialCode || "",
+        thickness: component.gauge || "",
+        finish: fixture.finish || "",
+        quantity: 0,
+        sources: new Set()
+      });
+      const entry = groups.get(key);
+      const qty = Number(component.quantityPerAssembly);
+      if (!Number.isFinite(qty) || qty < 0 || component.quantityPerAssembly === "") {
+        throw new Error("Invalid quantity for " + component.partNumber + " in " + fixture.fixtureTag);
+      }
+      entry.quantity += qty * Number(fixture.fixtureQuantity || 0);
+      entry.sources.add(fixture.fixtureTag);
+      if (!entry.material && component.materialCode) entry.material = component.materialCode;
+    }
+  }
+  cuttingListPreview = [...groups.values()].sort((a,b) =>
+    a.material.localeCompare(b.material) || a.thickness.localeCompare(b.thickness) || a.dxfFilename.localeCompare(b.dxfFilename)
+  );
+  $("cuttingListRows").innerHTML = cuttingListPreview.length ? cuttingListPreview.map(line =>
+    "<tr><td>" + esc(line.dxfFilename) + "</td><td>" + esc(line.material || "—") +
+    "</td><td>" + esc(line.thickness || "—") + "</td><td>" + esc(line.quantity) +
+    "</td><td>" + esc(line.finish || "—") + "</td><td>" + esc([...line.sources].join(", ")) + "</td></tr>"
+  ).join("") : '<tr><td colspan="6" class="empty">No matched DXF components found in the saved fixture BOMs.</td></tr>';
+  $("exportCuttingListBtn").disabled = cuttingListPreview.length === 0;
+  $("cuttingListStatus").textContent = cuttingListPreview.length + " consolidated DXF line(s) from " +
+    fixtures.length + " fixture BOM(s). " + noDxfCount + " BOM component(s) without DXF were excluded.";
+  $("cuttingListStatus").className = cuttingListPreview.length ? "ok" : "status-text";
+}
+
+$("previewCuttingListBtn").addEventListener("click", () => {
+  try { renderCuttingListPreview(); }
+  catch (error) {
+    $("cuttingListStatus").textContent = error.message;
+    $("cuttingListStatus").className = "error";
+    $("exportCuttingListBtn").disabled = true;
+  }
+});
+
+$("exportCuttingListBtn").addEventListener("click", async () => {
+  const button = $("exportCuttingListBtn");
+  button.disabled = true;
+  $("cuttingListStatus").textContent = "Generating Laser Order Request Excel…";
+  try {
+    const fixtures = collectProjectBomData();
+    const response = await fetch("/api/export-cutting-list-xlsx", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectName: $("projectName").value,
+        customer: $("customer").value,
+        storeNumber: $("projectNumber").value,
+        poNumber: $("poNumber").value,
+        orderNumber: $("laserOrderNumber").value,
+        orderDate: $("laserOrderDate").value,
+        requestedBy: $("laserRequestedBy").value,
+        shipDate: $("laserShipDate").value,
+        fixtures
+      })
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || "Cutting list export failed.");
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "Laser Order Request - " + ($("laserOrderNumber").value || "TBD") +
+      " - " + ($("projectName").value || "Project") + ".xlsx";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    $("cuttingListStatus").textContent = "Laser Order Request generated. Review material, gauge, finish and quantities before sending to laser cutting.";
+    $("cuttingListStatus").className = "ok";
+  } catch (error) {
+    $("cuttingListStatus").textContent = error.message;
+    $("cuttingListStatus").className = "error";
+  } finally {
+    button.disabled = cuttingListPreview.length === 0;
+  }
+});
+
 const logoutButton = $("logoutBtn");
 if (logoutButton) {
   logoutButton.addEventListener("click", async () => {
