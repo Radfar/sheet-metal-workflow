@@ -357,6 +357,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(BOM_TEMPLATE_PATH);
+    const templateAssets = await readTemplateAssets();
     const templateWorksheet = workbook.getWorksheet("Sheet1");
     if (!templateWorksheet) {
       throw new Error("The original BOM template is missing its Sheet1 worksheet.");
@@ -367,6 +368,22 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       if (sheet.id !== templateWorksheet.id) workbook.removeWorksheet(sheet.id);
     }
     templateWorksheet.name = "BOM";
+
+    // The radio-button graphic is a separate saved branding asset, positioned beside the Stellar logo.
+    if (!templateAssets.radioButton?.dataUrl) {
+      throw new Error("Upload the Radio-button graphic in Project & fixture selection before exporting the BOM.");
+    }
+    const radioImage = validateImageDataUrl(templateAssets.radioButton.dataUrl);
+    const radioImageId = workbook.addImage({
+      buffer: Buffer.from(radioImage.dataUrl.split(",")[1], "base64"),
+      extension: radioImage.extension
+    });
+    // ExcelJS anchors are zero-based: G1:K6 corresponds to columns 6–11 and rows 0–6.
+    templateWorksheet.addImage(radioImageId, {
+      tl: { col: 6, row: 0 },
+      br: { col: 11, row: 6 },
+      editAs: "oneCell"
+    });
 
     const pageCount = Math.ceil(components.length / BOM_ROWS_PER_SHEET);
     const worksheets = [templateWorksheet];
