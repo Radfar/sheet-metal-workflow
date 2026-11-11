@@ -4,10 +4,6 @@ function clean(value) {
   return String(value ?? "").trim();
 }
 
-function safeFilename(value) {
-  return clean(value).replace(/[<>:"/\\\\|?*\\x00-\\x1F]/g, "").replace(/\\s+/g, " ").trim() || "TBD";
-}
-
 export async function buildCuttingListWorkbook(payload = {}) {
   const fixtures = Array.isArray(payload.fixtures) ? payload.fixtures : [];
   if (!fixtures.length) throw new Error("No fixture BOM data was supplied.");
