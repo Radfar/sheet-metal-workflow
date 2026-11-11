@@ -19,6 +19,7 @@ const AUTH_ENABLED = Boolean(AUTH_USERNAME && AUTH_PASSWORD && AUTH_SECRET);
 const SESSION_COOKIE = "smw_session";
 const SESSION_DURATION_SECONDS = 12 * 60 * 60;
 const BOM_ROWS_PER_SHEET = 25;
+const BOM_TEMPLATE_PATH = path.join(__dirname, "../test-data/Excel/BOM - PO 4400012611(1) - T01 recessed trough millwork linear profile.xlsx");
 
 if (IS_PRODUCTION && !AUTH_ENABLED) {
   throw new Error("Production requires APP_USERNAME, APP_PASSWORD, and AUTH_SECRET environment variables.");
@@ -202,6 +203,51 @@ function cellText(value) {
   return String(value).trim();
 }
 
+function cloneTemplateWorksheet(source, workbook, name) {
+  const target = workbook.addWorksheet(name);
+  target.properties = structuredClone(source.properties);
+  target.pageSetup = structuredClone(source.pageSetup);
+  target.views = structuredClone(source.views);
+  target.headerFooter = structuredClone(source.headerFooter);
+
+  const columnCount = Math.max(source.columnCount || 0, source.actualColumnCount || 0);
+  for (let index = 1; index <= columnCount; index++) {
+    const sourceColumn = source.getColumn(index);
+    const targetColumn = target.getColumn(index);
+    targetColumn.width = sourceColumn.width;
+    targetColumn.hidden = sourceColumn.hidden;
+    targetColumn.outlineLevel = sourceColumn.outlineLevel;
+    targetColumn.style = structuredClone(sourceColumn.style);
+  }
+
+  const rowCount = Math.max(source.rowCount || 0, source.actualRowCount || 0);
+  for (let rowNumber = 1; rowNumber <= rowCount; rowNumber++) {
+    const sourceRow = source.getRow(rowNumber);
+    const targetRow = target.getRow(rowNumber);
+    targetRow.height = sourceRow.height;
+    targetRow.hidden = sourceRow.hidden;
+    targetRow.outlineLevel = sourceRow.outlineLevel;
+    for (let columnNumber = 1; columnNumber <= columnCount; columnNumber++) {
+      const sourceCell = sourceRow.getCell(columnNumber);
+      const targetCell = targetRow.getCell(columnNumber);
+      targetCell.value = structuredClone(sourceCell.value);
+      targetCell.style = structuredClone(sourceCell.style);
+      targetCell.protection = structuredClone(sourceCell.protection);
+      if (sourceCell.note) targetCell.note = structuredClone(sourceCell.note);
+    }
+  }
+
+  for (const mergeRange of source.model?.merges || []) {
+    target.mergeCells(mergeRange);
+  }
+  for (const image of source.getImages()) {
+    target.addImage(image.imageId, structuredClone(image.range));
+  }
+  target.pageSetup.printArea = source.pageSetup.printArea;
+  return target;
+}
+
+
 app.post(
   "/api/import-solidworks-bom",
   express.raw({
@@ -300,6 +346,8 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       fixtureDescription = "",
       finish = "",
       bomFilenameDescription = "",
+      shipDate = "",
+      note = "",
       components = []
     } = req.body ?? {};
 
@@ -307,191 +355,98 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       return res.status(400).json({ error: "No BOM components to export." });
     }
 
-    const templateAssets = await readTemplateAssets();
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = "Sheet Metal Workflow";
-    workbook.created = new Date();
+    await workbook.xlsx.readFile(BOM_TEMPLATE_PATH);
+    const templateWorksheet = workbook.getWorksheet("Sheet1");
+    if (!templateWorksheet) {
+      throw new Error("The original BOM template is missing its Sheet1 worksheet.");
+    }
+
+    // Keep the original BOM form only; auxiliary sheets in the source workbook are not part of this export.
+    for (const sheet of [...workbook.worksheets]) {
+      if (sheet.id !== templateWorksheet.id) workbook.removeWorksheet(sheet.id);
+    }
+    templateWorksheet.name = "BOM";
+
+    const pageCount = Math.ceil(components.length / BOM_ROWS_PER_SHEET);
+    const worksheets = [templateWorksheet];
+    for (let page = 2; page <= pageCount; page++) {
+      worksheets.push(cloneTemplateWorksheet(templateWorksheet, workbook, "BOM " + page));
+    }
 
     const fixtureQty = Number(fixtureQuantity) || 0;
     const customerProject = [customer.trim(), projectName.trim()].filter(Boolean).join(" - ");
+    const exportDate = new Date();
+    const normalizedShipDate = /^\d{4}-\d{2}-\d{2}$/.test(String(shipDate))
+      ? new Date(String(shipDate) + "T12:00:00")
+      : null;
 
-    for (let pageStart = 0, page = 1; pageStart < components.length; pageStart += BOM_ROWS_PER_SHEET, page++) {
-      const worksheet = workbook.addWorksheet(page === 1 ? "BOM" : "BOM " + page);
-      for (const [assetName, position] of [
-        ["stellarLogo", { tl: { col: 0, row: 0 }, br: { col: 4, row: 7 }, editAs: "oneCell" }],
-        ["radioButton", { tl: { col: 6, row: 0 }, br: { col: 11, row: 7 }, editAs: "oneCell" }]
-      ]) {
-        const asset = templateAssets[assetName];
-        if (!asset?.dataUrl || !asset?.extension) continue;
-        const base64 = asset.dataUrl.split(",")[1];
-        const imageId = workbook.addImage({ base64, extension: asset.extension });
-        worksheet.addImage(imageId, position);
-      }
-      // Customer reference layout: Letter portrait, A1:K42, fixed 25-line BOM table.
-      worksheet.columns = [
-        { key: "item", width: 5.5 },
-        { key: "description", width: 10 },
-        { key: "c", width: 9 }, { key: "d", width: 9 }, { key: "e", width: 9 },
-        { key: "f", width: 9 }, { key: "g", width: 9 }, { key: "h", width: 9 },
-        { key: "i", width: 9 }, { key: "quantity", width: 10 }, { key: "total", width: 10 }
-      ];
-
-      worksheet.getCell("B8").value = "CUSTOMER:";
+    worksheets.forEach((worksheet, pageIndex) => {
       worksheet.getCell("C8").value = customerProject;
-      worksheet.getCell("E8").value = "PO #:";
       worksheet.getCell("F8").value = poNumber;
-      worksheet.getCell("H8").value = "DATE:";
-      worksheet.getCell("I8").value = new Date();
-      worksheet.getCell("I8").numFmt = "mmmm d, yyyy";
-
-      worksheet.getCell("B9").value = "UNIT:";
+      worksheet.getCell("I8").value = exportDate;
       worksheet.getCell("C9").value = fixtureTag;
-      worksheet.getCell("E9").value = "STORE #:";
       worksheet.getCell("F9").value = projectNumber;
-      worksheet.getCell("H9").value = "QUANTITY:";
       worksheet.getCell("I9").value = fixtureQty || "";
-
-      worksheet.getCell("B10").value = "FIXTURE:";
-      worksheet.mergeCells("C10:K10");
       worksheet.getCell("C10").value = fixtureDescription;
-      worksheet.getCell("B11").value = "FINISH:";
-      worksheet.mergeCells("C11:K11");
       worksheet.getCell("C11").value = finish;
 
-      const thinBorder = {
-        top: { style: "thin" }, left: { style: "thin" },
-        bottom: { style: "thin" }, right: { style: "thin" }
-      };
-
-      // Fixed 25-row BOM body, matching the customer's form.
-      for (let i = 0; i < BOM_ROWS_PER_SHEET; i++) {
-        const component = components[pageStart + i];
-        const rowNumber = 12 + i;
-        const quantity = Number(component?.quantityPerAssembly);
-        const validQuantity = Number.isFinite(quantity) && quantity >= 0 &&
-          component?.quantityPerAssembly !== "";
-        const description = component?.description?.trim() || "";
-
-        for (let colNumber = 1; colNumber <= 11; colNumber++) {
-          worksheet.getCell(rowNumber, colNumber).border = thinBorder;
-          worksheet.getCell(rowNumber, colNumber).alignment = {
-            vertical: "middle", wrapText: true
-          };
+      // Clear the sample order's data without touching the template's styles or borders.
+      for (let index = 0; index < BOM_ROWS_PER_SHEET; index++) {
+        const rowNumber = 12 + index;
+        for (const column of [1, 2, 10, 11]) {
+          worksheet.getCell(rowNumber, column).value = null;
         }
 
-        worksheet.getCell("A" + rowNumber).value = component
-          ? (component.itemNo || String(pageStart + i + 1)) : "";
+        const component = components[pageIndex * BOM_ROWS_PER_SHEET + index];
+        if (!component) continue;
 
-        worksheet.mergeCells("B" + rowNumber + ":I" + rowNumber);
-        worksheet.getCell("B" + rowNumber).value = component ? description : "";
+        const quantity = Number(component.quantityPerAssembly);
+        if (!Number.isFinite(quantity) || quantity < 0 || component.quantityPerAssembly === "") {
+          throw new Error("Invalid BOM quantity for " + (component.partNumber || "an unnamed component") + ".");
+        }
 
-        worksheet.getCell("J" + rowNumber).value =
-          component && validQuantity ? quantity : "";
+        worksheet.getCell(rowNumber, 1).value =
+          component.itemNo || String(pageIndex * BOM_ROWS_PER_SHEET + index + 1);
+        worksheet.getCell(rowNumber, 2).value =
+          String(component.description || component.partNumber || "").trim();
+        worksheet.getCell(rowNumber, 10).value = quantity;
 
-        if (component && fixtureQty > 0 && validQuantity) {
-          worksheet.getCell("K" + rowNumber).value = {
-            formula: 'IF(OR(J' + rowNumber + '="", $I$9=""), "", J' +
-              rowNumber + '*$I$9)',
+        if (fixtureQty > 0) {
+          worksheet.getCell(rowNumber, 11).value = {
+            formula: "J" + rowNumber + "*I9",
             result: quantity * fixtureQty
           };
-        } else {
-          worksheet.getCell("K" + rowNumber).value = "";
-        }
-
-        worksheet.getCell("A" + rowNumber).alignment = {
-          horizontal: "center", vertical: "middle"
-        };
-        worksheet.getCell("J" + rowNumber).alignment = {
-          horizontal: "center", vertical: "middle"
-        };
-        worksheet.getCell("K" + rowNumber).alignment = {
-          horizontal: "center", vertical: "middle"
-        };
-        worksheet.getRow(rowNumber).height = 20;
-      }
-
-      for (const address of [
-        "B8", "E8", "H8", "B9", "E9", "H9", "B10", "B11"
-      ]) {
-        worksheet.getCell(address).font = { bold: true };
-        worksheet.getCell(address).alignment = {
-          vertical: "middle", horizontal: "left"
-        };
-      }
-
-      for (const address of [
-        "C8", "F8", "I8", "C9", "F9", "I9", "C10", "C11"
-      ]) {
-        worksheet.getCell(address).alignment = {
-          vertical: "middle", horizontal: "left", wrapText: true
-        };
-      }
-
-      worksheet.getCell("A38").value = "Finish Date";
-      worksheet.getCell("G38").value = "Shift Date";
-      worksheet.getCell("K38").value = "Track Number #1";
-      worksheet.getCell("A39").value = "Note";
-      worksheet.getCell("A42").value = "Cut By";
-      worksheet.getCell("H42").value = "Cut Date";
-
-      for (const address of [
-        "A38", "G38", "K38", "A39", "A42", "H42"
-      ]) {
-        worksheet.getCell(address).font = { bold: true };
-        worksheet.getCell(address).alignment = {
-          vertical: "middle", horizontal: "left"
-        };
-      }
-
-      for (let rowNumber = 1; rowNumber <= 7; rowNumber++) worksheet.getRow(rowNumber).height = 20;
-      for (let rowNumber = 8; rowNumber <= 11; rowNumber++) worksheet.getRow(rowNumber).height = 20;
-      worksheet.getRow(37).height = 8;
-      for (const rowNumber of [38, 39, 40, 41, 42]) worksheet.getRow(rowNumber).height = 20;
-
-      // Arial 10 throughout the printable form, preserving bold and other font attributes.
-      for (let rowNumber = 1; rowNumber <= 42; rowNumber++) {
-        const row = worksheet.getRow(rowNumber);
-        for (let colNumber = 1; colNumber <= 11; colNumber++) {
-          const cell = row.getCell(colNumber);
-          cell.font = { ...cell.font, name: "Arial", size: 10 };
         }
       }
 
-      worksheet.pageSetup = {
-        orientation: "portrait",
-        fitToPage: true,
-        fitToWidth: 1,
-        fitToHeight: 1,
-        paperSize: worksheet.PAPERSIZE_LETTER,
-        margins: {
-          left: 0.20, right: 0.16, top: 0.20, bottom: 0.20,
-          header: 0.10, footer: 0.10
-        },
-        horizontalDpi: 300,
-        verticalDpi: 300
-      };
-      worksheet.pageSetup.printArea = "A1:K42";
-      worksheet.pageSetup.horizontalCentered = false;
-      worksheet.views = [{ state: "normal" }];
-    }
+      // The template's footer labels and ruled areas are retained; populate only supplied data.
+      worksheet.getCell("H38").value = normalizedShipDate;
+      worksheet.getCell("B39").value = note;
+    });
 
-    const safeSegment = value => String(value || "").replace(/[<>:"/\\|?*\x00-\x1F]/g, "").replace(/\s+/g, " ").trim();
+    const safeSegment = value => String(value || "")
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
     const safePo = safeSegment(poNumber) || "TBD";
     const safeRow = safeSegment(scheduleRowNumber);
     const safeTag = safeSegment(fixtureTag) || "Fixture";
     const safeDescription = safeSegment(bomFilenameDescription);
     const filename = "BOM - PO " + safePo + (safeRow ? "(" + safeRow + ")" : "") +
       " - " + safeTag + (safeDescription ? " " + safeDescription : "") + ".xlsx";
+
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", 'attachment; filename="' + filename + '"');
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) {
     console.error("BOM XLSX export failed:", error);
-    if (!res.headersSent) res.status(500).json({ error: "Could not generate the Excel BOM." });
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message || "Could not generate the Excel BOM." });
+    }
   }
 });
-
 
 app.post("/api/export-cutting-list-xlsx", async (req, res) => {
   try {
