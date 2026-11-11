@@ -286,7 +286,7 @@ function renderComponents() {
   const body = $("componentRows");
 
   if (!components.length) {
-    body.innerHTML = '<tr><td colspan="8" class="empty">Import a SolidWorks BOM to begin.</td></tr>';
+    body.innerHTML = '<tr><td colspan="8" class="empty">Read a fixture folder and build the BOM Component Tree View to begin.</td></tr>';
     renderSummary();
     return;
   }
@@ -588,7 +588,6 @@ async function importFixtureFolder() {
   if (bomCandidates.length !== 1) throw new Error("Expected exactly one " + tag + ".xls or " + tag + ".xlsx directly inside the fixture folder.");
   const pdfCandidates = entries.filter(entry => entry.path === tag + "/" + tag + ".pdf");
   if (pdfCandidates.length !== 1) throw new Error("Expected drawing file " + tag + ".pdf directly inside the fixture folder.");
-  const lowerDxfFolder = entries.some(entry => entry.path.split("/")[1] === "dxf");
   if (entries.some(entry => {
     const folderName = entry.path.split("/")[1];
     return folderName && folderName.toUpperCase() === "DXF" && folderName !== "DXF";
