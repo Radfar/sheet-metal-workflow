@@ -120,7 +120,7 @@ function makeDraftDescription(partNumber, dxf) {
 }
 
 
-const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["cuttingListIdentity","Approved common DXF identity / filename","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
+const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["cuttingListIdentity","Approved common DXF identity / filename","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["cuttingListFinish","Laser order finish (optional)","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
 
 function engineeringExample(key, component) {
   const part = String(component.partNumber || "").toUpperCase();
@@ -138,6 +138,7 @@ function engineeringExample(key, component) {
     cuttingListIdentity: "Optional: enter the same approved common DXF filename/key only when different fixture DXFs are confirmed identical.",
     materialGrade: "Enter the full material callout from the drawing",
     gauge: "e.g. 16GA. or 11GA. — verify on drawing",
+    cuttingListFinish: "Leave blank unless the laser order line has a specific finish.",
     crossSectionDimensions: isAngle ? 'e.g. 1" x 1 3/8"' : 'e.g. 7 11/16" x 9" x 7 11/16"',
     geometryDimensions: 'e.g. 1 3/4" x 8 13/16" x 1 3/4"',
     profileType: "e.g. Chn'l",
