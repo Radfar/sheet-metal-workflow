@@ -7,6 +7,8 @@ let currentFixtureTag = "";
 let drawingText = "";
 const fixtureData = {};
 let templateAssets = { stellarLogo: "", radioButton: "" };
+let selectedFixtureFolderEntries = null;
+let selectedFixtureFolderName = "";
 
 
 function makeBomFilename() {
@@ -274,10 +276,19 @@ function renderSummary() {
       esc(item.mounting) + '</td><td>' + esc(item.profile) + '</td><td>' +
       esc(item.width) + '</td><td>' + esc(item.length) + '</td><td>' +
       esc(item.finish) + '</td><td>' + esc(item.qty) + '</td><td>' +
-      esc(count) + '</td><td><span class="ok" title="BOM Excel generated">✓</span></td>' +
+      esc(count) + '</td><td><span class="summary-check" title="BOM Excel generated">✓</span></td>' +
       '<td><input type="checkbox" data-laser-include="' + esc(item.tag) + '"' + (include ? ' checked' : '') +
       ' aria-label="Include ' + esc(item.tag) + ' in Laser Order Request"></td></tr>';
   }).join("") : '<tr><td colspan="11" class="empty">No fixture BOM has been generated yet.</td></tr>';
+  updateLaserOrderButtonState();
+}
+
+function updateLaserOrderButtonState() {
+  const hasSelectedGeneratedBom = schedule.some(item => {
+    const saved = fixtureData[item.tag];
+    return saved?.bomGenerated && saved.includeInLaser !== false && Array.isArray(saved.components) && saved.components.length > 0;
+  });
+  $("exportCuttingListBtn").disabled = !hasSelectedGeneratedBom;
 }
 
 function renderComponents() {
@@ -572,14 +583,67 @@ async function extractDrawingPdfText(pdfFile) {
   return { text: text.trim(), pageCount: pdf.numPages };
 }
 
+async function readSelectedDirectory(handle) {
+  const rootName = handle.name;
+  const entries = [];
+  for await (const [name, child] of handle.entries()) {
+    if (child.kind === "file") {
+      entries.push({ file: await child.getFile(), path: rootName + "/" + name });
+      continue;
+    }
+    if (child.kind === "directory" && name.toUpperCase() === "DXF") {
+      entries.push({ file: null, path: rootName + "/" + name + "/" });
+      if (name !== "DXF") continue;
+      for await (const [dxfName, dxfHandle] of child.entries()) {
+        if (dxfHandle.kind === "file") {
+          entries.push({ file: await dxfHandle.getFile(), path: rootName + "/DXF/" + dxfName });
+        }
+      }
+    }
+  }
+  return entries;
+}
+
+$("chooseFixtureFolderBtn").addEventListener("click", async () => {
+  if (!("showDirectoryPicker" in window)) {
+    $("fixtureFolderInput").click();
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: "read" });
+    selectedFixtureFolderEntries = await readSelectedDirectory(handle);
+    selectedFixtureFolderName = handle.name;
+    $("fixtureFolderStatus").textContent = "Selected folder: " + handle.name + " (" +
+      selectedFixtureFolderEntries.filter(entry => entry.file).length + " files discovered locally).";
+    $("fixtureFolderStatus").className = "status-text";
+  } catch (error) {
+    if (error.name !== "AbortError") {
+      $("fixtureFolderStatus").textContent = "Could not read the selected folder: " + error.message;
+      $("fixtureFolderStatus").className = "error";
+    }
+  }
+});
+
+$("fixtureFolderInput").addEventListener("change", () => {
+  selectedFixtureFolderEntries = null;
+  selectedFixtureFolderName = "";
+  const files = Array.from($("fixtureFolderInput").files || []);
+  $("fixtureFolderStatus").textContent = files.length
+    ? "Selected folder: " + (files[0].webkitRelativePath || files[0].name).split("/")[0] + " (" + files.length + " files)."
+    : "Select the current fixture folder.";
+  $("fixtureFolderStatus").className = "status-text";
+});
+
 async function importFixtureFolder() {
-  const selected = Array.from($("fixtureFolderInput").files || []);
+  const selected = selectedFixtureFolderEntries || Array.from($("fixtureFolderInput").files || []);
   const tag = $("fixtureSelect").value;
   const status = $("fixtureFolderStatus");
   const button = $("importFixtureFolderBtn");
   if (!selected.length) throw new Error("Select the fixture folder first.");
   if (!tag) throw new Error("Select a fixture tag from the project schedule.");
-  const entries = selected.map(file => ({ file, path: String(file.webkitRelativePath || file.name).replace(/\\/g, "/") }));
+  const entries = selected.map(entry => entry && entry.path
+    ? entry
+    : ({ file: entry, path: String(entry.webkitRelativePath || entry.name).replace(/\\/g, "/") }));
   const roots = [...new Set(entries.map(entry => entry.path.split("/")[0]))];
   if (roots.length !== 1 || roots[0] !== tag) {
     throw new Error("The selected folder must be named exactly " + tag + " (uppercase, matching the schedule). Found: " + roots.join(", "));
@@ -652,6 +716,9 @@ async function importFixtureFolder() {
     $("buildComponentTreeBtn").disabled = false;
     $("componentTreePanel").hidden = true;
     renderSummary();
+    selectedFixtureFolderEntries = null;
+    selectedFixtureFolderName = "";
+    $("fixtureFolderInput").value = "";
   } finally {
     button.disabled = false;
   }
@@ -923,6 +990,7 @@ function renderCuttingListPreview() {
         thickness: component.gauge || "",
         finish: component.cuttingListFinish || "",
         quantity: 0,
+        common: Boolean(component.dxf.consolidationKey) || String(component.dxf.fixtureTag || "").toUpperCase() === "COMMON",
         sources: new Set()
       });
       const entry = groups.get(key);
@@ -936,14 +1004,15 @@ function renderCuttingListPreview() {
     }
   }
   cuttingListPreview = [...groups.values()].sort((a,b) =>
-    a.material.localeCompare(b.material) || a.thickness.localeCompare(b.thickness) || a.dxfFilename.localeCompare(b.dxfFilename)
+    Number(b.common) - Number(a.common) || a.material.localeCompare(b.material) ||
+    a.thickness.localeCompare(b.thickness) || a.dxfFilename.localeCompare(b.dxfFilename)
   );
   $("cuttingListRows").innerHTML = cuttingListPreview.length ? cuttingListPreview.map(line =>
     "<tr><td>" + esc(line.dxfFilename) + "</td><td>" + esc(line.material || "—") +
     "</td><td>" + esc(line.thickness || "—") + "</td><td>" + esc(line.quantity) +
     "</td><td>" + esc(line.finish || "—") + "</td><td>PC</td><td>" + esc([...line.sources].join(", ")) + "</td></tr>"
   ).join("") : '<tr><td colspan="7" class="empty">No matched DXF components found in the saved fixture BOMs.</td></tr>';
-  $("exportCuttingListBtn").disabled = cuttingListPreview.length === 0;
+  $("exportCuttingListBtn").disabled = !fixtures.length || cuttingListPreview.length === 0;
   $("cuttingListStatus").textContent = cuttingListPreview.length + " consolidated DXF line(s) from " +
     fixtures.length + " selected, generated fixture BOM(s). " + noDxfCount + " BOM component(s) without DXF were excluded.";
   $("cuttingListStatus").className = cuttingListPreview.length ? "ok" : "status-text";
@@ -961,9 +1030,13 @@ $("previewCuttingListBtn").addEventListener("click", () => {
 $("exportCuttingListBtn").addEventListener("click", async () => {
   const button = $("exportCuttingListBtn");
   button.disabled = true;
-  $("cuttingListStatus").textContent = "Generating Laser Order Request Excel…";
+  $("cuttingListStatus").textContent = "Preparing the selected fixture BOMs…";
   try {
     const fixtures = collectProjectBomData();
+    if (!fixtures.length) throw new Error("Generate at least one fixture BOM and include it in the Project Schedule Summary.");
+    renderCuttingListPreview();
+    if (!cuttingListPreview.length) throw new Error("No matched DXF components are available for the Laser Order Request.");
+    $("cuttingListStatus").textContent = "Generating Laser Order Request Excel…";
     const response = await fetch("/api/export-cutting-list-xlsx", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -999,7 +1072,7 @@ $("exportCuttingListBtn").addEventListener("click", async () => {
     $("cuttingListStatus").textContent = error.message;
     $("cuttingListStatus").className = "error";
   } finally {
-    button.disabled = cuttingListPreview.length === 0;
+    updateLaserOrderButtonState();
   }
 });
 
