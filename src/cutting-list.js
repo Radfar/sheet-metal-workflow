@@ -26,8 +26,8 @@ export async function buildCuttingListWorkbook(payload = {}) {
       }
       const material = clean(component.materialGrade);
       const thickness = clean(component.gauge);
-      const finish = clean(fixture.finish);
-      // Exact DXF filename is the initial identity key. Similar names/dimensions are never merged.
+      const finish = clean(component.cuttingListFinish);
+      // Exact DXF filename is the default identity. An explicit approved common identity may override it.
       const identity = [clean(dxf.consolidationKey || dxf.originalFilename).toLowerCase(), material.toUpperCase(), thickness.toUpperCase(), finish.toUpperCase()].join("|");
       const key = identity;
       if (!grouped.has(key)) {
@@ -36,6 +36,7 @@ export async function buildCuttingListWorkbook(payload = {}) {
           material: material || clean(component.materialCode) || "",
           thickness,
           finish,
+          sourceFixtureTag: clean(dxf.fixtureTag),
           quantity: 0,
           unit: "PC",
           fixtureContributions: []
@@ -82,10 +83,13 @@ export async function buildCuttingListWorkbook(payload = {}) {
   let row = 7;
   const groups = new Map();
   for (const line of lines) {
-    const key = (line.material || "MATERIAL NOT SPECIFIED") + " / " + (line.thickness || "THICKNESS NOT SPECIFIED");
+    const key = line.sourceFixtureTag.toUpperCase() === "COMMON"
+      ? "COMMON PARTS"
+      : (line.material || "MATERIAL NOT SPECIFIED") + " / " + (line.thickness || "THICKNESS NOT SPECIFIED");
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(line);
   }
+  let itemNumber = 1;
   for (const [groupName, groupLines] of groups) {
     ws.mergeCells(row,1,row,6);
     const section = ws.getCell(row,1);
@@ -103,7 +107,7 @@ export async function buildCuttingListWorkbook(payload = {}) {
     });
     row++;
     for (const line of groupLines) {
-      const values = [row - 8, line.dxfFilename, line.material, line.thickness, line.quantity, line.finish];
+      const values = [itemNumber++, line.dxfFilename, line.material, line.thickness, line.quantity, line.finish];
       values.forEach((value,index) => {
         const cell = ws.getCell(row,index+1);
         cell.value = value;
