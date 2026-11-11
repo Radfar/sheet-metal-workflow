@@ -346,6 +346,14 @@ function loadFixture(tag) {
   $("currentFixtureLabel").textContent = item.tag + " · " + item.qty + " fixture(s)";
 
   const saved = fixtureData[item.tag];
+  const source = saved?.sourceFiles;
+  $("fixtureSourcePaths").textContent = source
+    ? "Sources: PDF " + source.drawingPdf + " · BOM " + source.solidworksBom + " · DXF " + source.dxfFolder + " (" + (source.dxfFilenames?.length || 0) + " filenames)."
+    : "Source references: drawing PDF —; SolidWorks BOM —; DXF folder —.";
+  if ($("fixtureFolderStatus")) {
+    $("fixtureFolderStatus").textContent = source ? "Previously imported source folder: " + source.fixtureFolder : "Select the current fixture folder.";
+    $("fixtureFolderStatus").className = source ? "ok" : "status-text";
+  }
   bomLines = saved ? clone(saved.bomLines) : [];
   dxfFiles = saved ? clone(saved.dxfFiles) : [];
   components = saved ? clone(saved.components) : [];
@@ -567,7 +575,7 @@ async function importFixtureFolder() {
   const button = $("importFixtureFolderBtn");
   if (!selected.length) throw new Error("Select the fixture folder first.");
   if (!tag) throw new Error("Select a fixture tag from the project schedule.");
-  const entries = selected.map(file => ({ file, path: String(file.webkitRelativePath || file.name).replace(/\\\\/g, "/") }));
+  const entries = selected.map(file => ({ file, path: String(file.webkitRelativePath || file.name).replace(/\\/g, "/") }));
   const roots = [...new Set(entries.map(entry => entry.path.split("/")[0]))];
   if (roots.length !== 1 || roots[0] !== tag) {
     throw new Error("The selected folder must be named exactly " + tag + " (uppercase, matching the schedule). Found: " + roots.join(", "));
@@ -577,10 +585,13 @@ async function importFixtureFolder() {
   const pdfCandidates = entries.filter(entry => entry.path === tag + "/" + tag + ".pdf");
   if (pdfCandidates.length !== 1) throw new Error("Expected drawing file " + tag + ".pdf directly inside the fixture folder.");
   const lowerDxfFolder = entries.some(entry => entry.path.split("/")[1] === "dxf");
-  if (lowerDxfFolder) throw new Error("The DXF subfolder must be named exactly DXF in uppercase.");
+  if (entries.some(entry => {
+    const folderName = entry.path.split("/")[1];
+    return folderName && folderName.toUpperCase() === "DXF" && folderName !== "DXF";
+  })) throw new Error("The DXF subfolder must be named exactly DXF in uppercase.");
   const dxfEntries = entries.filter(entry => {
     const parts = entry.path.split("/");
-    return parts.length === 3 && parts[0] === tag && parts[1] === "DXF" && /\\.dxf$/i.test(parts[2]);
+    return parts.length === 3 && parts[0] === tag && parts[1] === "DXF" && /\.dxf$/i.test(parts[2]);
   });
   if (!dxfEntries.length) throw new Error("No DXF files found. Expected files directly inside " + tag + "/DXF/.");
   button.disabled = true;
