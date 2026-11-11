@@ -675,6 +675,14 @@ $("summaryRows").addEventListener("change", event => {
   fixtureData[tag].includeInLaser = checkbox.checked;
   $("summaryStatus").textContent = tag + (checkbox.checked ? " included in" : " excluded from") + " the next Laser Order Request preview.";
   $("summaryStatus").className = "ok";
+  if (cuttingListPreview.length) {
+    try { renderCuttingListPreview(); }
+    catch (error) {
+      $("cuttingListStatus").textContent = error.message;
+      $("cuttingListStatus").className = "error";
+      $("exportCuttingListBtn").disabled = true;
+    }
+  }
 });
 
 $("componentRows").addEventListener("change", event => {
