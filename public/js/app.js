@@ -1089,6 +1089,7 @@ $("exportCuttingListBtn").addEventListener("click", async () => {
         orderDate: $("laserOrderDate").value,
         requestedBy: $("laserRequestedBy").value,
         shipDate: $("laserShipDate").value,
+        mountingComment: [...new Set(fixtures.map(fixture => fixture.mountingComment).filter(Boolean))].join(" / "),
         fixtures
       })
     });
