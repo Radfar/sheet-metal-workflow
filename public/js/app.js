@@ -759,8 +759,7 @@ async function importFixtureFolder() {
   status.textContent = "Reading the SolidWorks BOM and discovering DXF filenames…";
   status.className = "status-text";
   $("buildComponentTreeBtn").disabled = true;
-  try {
-    const bomFile = bomCandidates[0].file;
+  const bomFile = bomCandidates[0].file;
     const bomResponse = await fetch("/api/import-solidworks-bom", {
       method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: bomFile
     });
@@ -830,7 +829,6 @@ async function importFixtureFolder() {
     selectedFixtureFolderEntries = null;
     selectedFixtureFolderName = "";
     $("fixtureFolderInput").value = "";
-  }
 }
 
 $("buildComponentTreeBtn").addEventListener("click", () => {
