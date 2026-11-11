@@ -63,9 +63,9 @@ export async function buildCuttingListWorkbook(payload = {}) {
   workbook.created = new Date();
   const ws = workbook.addWorksheet("Laser Order Request");
   ws.columns = [
-    { width: 7 }, { width: 62 }, { width: 14 }, { width: 12 }, { width: 14 }, { width: 16 }
+    { width: 7 }, { width: 62 }, { width: 14 }, { width: 12 }, { width: 14 }, { width: 16 }, { width: 10 }
   ];
-  ws.mergeCells("A1:F1");
+  ws.mergeCells("A1:G1");
   ws.getCell("A1").value = "LASER ORDER REQUEST";
   ws.getCell("A1").font = { name: "Arial", size: 16, bold: true };
   ws.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
@@ -93,13 +93,13 @@ export async function buildCuttingListWorkbook(payload = {}) {
   }
   let itemNumber = 1;
   for (const [groupName, groupLines] of groups) {
-    ws.mergeCells(row,1,row,6);
+    ws.mergeCells(row,1,row,7);
     const section = ws.getCell(row,1);
     section.value = groupName;
     section.font = { bold: true, color: { argb: "FFFFFFFF" } };
     section.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF40576B" } };
     row++;
-    const headers = ["", "DXF FILE NAME", "MATERIAL", "THK", "Q. REQ'D", "FINISH"];
+    const headers = ["", "DXF FILE NAME", "MATERIAL", "THK", "Q. REQ'D", "FINISH", "UNIT"];
     headers.forEach((value,index) => {
       const cell = ws.getCell(row,index+1);
       cell.value = value;
@@ -109,7 +109,7 @@ export async function buildCuttingListWorkbook(payload = {}) {
     });
     row++;
     for (const line of groupLines) {
-      const values = [itemNumber++, line.dxfFilename, line.material, line.thickness, line.quantity, line.finish];
+      const values = [itemNumber++, line.dxfFilename, line.material, line.thickness, line.quantity, line.finish, line.unit];
       values.forEach((value,index) => {
         const cell = ws.getCell(row,index+1);
         cell.value = value;
@@ -126,13 +126,14 @@ export async function buildCuttingListWorkbook(payload = {}) {
   ws.getColumn(4).width = 12;
   ws.getColumn(5).width = 14;
   ws.getColumn(6).width = 16;
+  ws.getColumn(7).width = 10;
   ws.views = [{ state: "frozen", ySplit: 7 }];
   ws.pageSetup = {
     orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0,
     paperSize: ws.PAPERSIZE_LETTER,
     margins: { left: 0.2, right: 0.2, top: 0.35, bottom: 0.35, header: 0.15, footer: 0.15 }
   };
-  ws.pageSetup.printArea = "A1:F" + (row - 1);
+  ws.pageSetup.printArea = "A1:G" + (row - 1);
   const buffer = await workbook.xlsx.writeBuffer();
   return { buffer, lineCount: lines.length, skippedFixtures: skipped, contributingFixtures: fixtures.length };
 }
