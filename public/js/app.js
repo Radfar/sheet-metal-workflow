@@ -722,6 +722,7 @@ function collectProjectBomData() {
           materialCode: component.materialCode || dxf?.materialCode || "",
           materialGrade: component.materialGrade || "",
           gauge: component.gauge || "",
+          cuttingListFinish: component.cuttingListFinish || "",
           dxf: dxf ? { originalFilename: dxf.originalFilename, fixtureTag: dxf.fixtureTag, consolidationKey: component.cuttingListIdentity || "", outputFilename: component.cuttingListIdentity || dxf.originalFilename } : null
         };
       })
@@ -738,12 +739,12 @@ function renderCuttingListPreview() {
   for (const fixture of fixtures) {
     for (const component of fixture.components) {
       if (!component.dxf) { noDxfCount++; continue; }
-      const key = [String(component.dxf.consolidationKey || component.dxf.originalFilename).toLowerCase(), String(component.materialGrade || "").toUpperCase(), String(component.gauge || "").toUpperCase(), String(fixture.finish || "").toUpperCase()].join("|");
+      const key = [String(component.dxf.consolidationKey || component.dxf.originalFilename).toLowerCase(), String(component.materialGrade || "").toUpperCase(), String(component.gauge || "").toUpperCase(), String(component.cuttingListFinish || "").toUpperCase()].join("|");
       if (!groups.has(key)) groups.set(key, {
         dxfFilename: component.dxf.outputFilename || component.dxf.originalFilename,
         material: component.materialGrade || component.materialCode || "",
         thickness: component.gauge || "",
-        finish: fixture.finish || "",
+        finish: component.cuttingListFinish || "",
         quantity: 0,
         sources: new Set()
       });
