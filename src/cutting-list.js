@@ -47,6 +47,14 @@ function formatOrderShipRange(orderDate, shipDate) {
     : startLabel + ", " + String(start.year).slice(-2) + "-" + endLabel + ", " + String(end.year).slice(-2);
 }
 
+function normalizeCommonDxfFilename(filename, fixtureTag) {
+  const name = clean(filename).toLowerCase();
+  const tag = clean(fixtureTag).toLowerCase();
+  if (!name || !tag) return name;
+  const escaped = tag.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\function classifyMaterial(component, dxf, fixture) {");
+  return name.replace(new RegExp("(^|[^a-z0-9])" + escaped + "(?=[^a-z0-9]|$)", "i"), "$1");
+}
+
 function classifyMaterial(component, dxf, fixture) {
   const code = clean(component.materialCode || dxf.materialCode).toUpperCase();
   const material = clean(component.materialGrade) || (code === "C11" || code === "C16" ? "CRS" : "");
@@ -101,6 +109,20 @@ export async function buildCuttingListWorkbook(payload = {}) {
     }
   }
   const commonHashes = new Set([...hashFixtureMap.entries()].filter(([, tags]) => tags.size > 1).map(([hash]) => hash));
+  const commonFilenameMap = new Map();
+  for (const fixture of fixtures) {
+    const fixtureTag = clean(fixture.fixtureTag);
+    for (const component of (Array.isArray(fixture.components) ? fixture.components : [])) {
+      const dxf = component.dxf;
+      if (!dxf || !clean(dxf.originalFilename)) continue;
+      const commonKey = normalizeCommonDxfFilename(dxf.originalFilename, fixtureTag);
+      if (!commonFilenameMap.has(commonKey)) commonFilenameMap.set(commonKey, new Set());
+      commonFilenameMap.get(commonKey).add(fixtureTag.toUpperCase());
+    }
+  }
+  const commonFilenameKeys = new Set([...commonFilenameMap.entries()]
+    .filter(([, tags]) => tags.size > 1)
+    .map(([key]) => key));
   const groups = { common: [], gauge16: [], gauge11: [] };
   const groupMap = new Map();
   const skipped = [];
@@ -123,10 +145,17 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
       const classified = classifyMaterial(component, dxf, fixture);
       const hashCommon = Boolean(dxf.sha256 && commonHashes.has(dxf.sha256));
-      const isCommon = Boolean(dxf.consolidationKey) || clean(dxf.fixtureTag).toUpperCase() === "COMMON" || hashCommon;
+      const commonFilenameKey = normalizeCommonDxfFilename(dxf.originalFilename, fixtureTag);
+      const filenameCommon = commonFilenameKeys.has(commonFilenameKey);
+      const isCommon = Boolean(dxf.consolidationKey) ||
+        clean(dxf.fixtureTag).toUpperCase() === "COMMON" ||
+        hashCommon ||
+        filenameCommon;
       const dxfIdentity = dxf.consolidationKey
         ? "approved:" + clean(dxf.consolidationKey).toLowerCase()
-        : hashCommon ? "sha256:" + clean(dxf.sha256) : clean(dxf.originalFilename).toLowerCase();
+        : hashCommon ? "sha256:" + clean(dxf.sha256)
+        : filenameCommon ? "common-filename:" + commonFilenameKey
+        : clean(dxf.originalFilename).toLowerCase();
       const identity = [
         dxfIdentity,
         classified.material.toUpperCase(),
