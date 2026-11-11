@@ -128,6 +128,28 @@
     </div>
   </section>
 
+
+  <section class="panel">
+    <div class="heading"><h2><b>07</b> Consolidated Laser Order Request</h2><small>Project-level production output</small></div>
+    <p class="notice">Generate this after all fixture BOMs have been imported and reviewed in this browser session. Quantities are calculated from Qty / fixture × fixture production quantity. Only exact matched DXF filenames are consolidated; different filenames are not merged automatically.</p>
+    <div class="grid">
+      <label>Laser order number<input id="laserOrderNumber" placeholder="e.g. RA-5075"></label>
+      <label>Order date<input id="laserOrderDate" type="date"></label>
+      <label>Requested by<input id="laserRequestedBy" placeholder="Optional"></label>
+      <label>Ship date<input id="laserShipDate" type="date"></label>
+    </div>
+    <div class="actions">
+      <button id="previewCuttingListBtn" class="secondary" type="button">Preview consolidated quantities</button>
+      <button id="exportCuttingListBtn" type="button" disabled>Generate Laser Order Request Excel</button>
+      <span id="cuttingListStatus" class="status-text">No consolidated list generated yet.</span>
+    </div>
+    <div class="table-wrap summary-wrap">
+      <table class="summary-table">
+        <thead><tr><th>DXF FILE NAME</th><th>MATERIAL</th><th>THK</th><th>Q. REQ'D</th><th>FINISH</th><th>Source BOMs</th></tr></thead>
+        <tbody id="cuttingListRows"><tr><td colspan="6" class="empty">Preview the project cutting list after importing fixture BOMs.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
   <footer>V0.5.0 · Draft engineering data only · Manufacturing descriptions require engineering review</footer>
 </main>
 <script src="/js/app.js"></script>
