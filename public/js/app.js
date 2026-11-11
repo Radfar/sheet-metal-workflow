@@ -120,7 +120,7 @@ function makeDraftDescription(partNumber, dxf) {
 }
 
 
-const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
+const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["cuttingListIdentity","Approved common DXF identity / filename","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
 
 function engineeringExample(key, component) {
   const part = String(component.partNumber || "").toUpperCase();
@@ -134,6 +134,7 @@ function engineeringExample(key, component) {
   const examples = {
     componentType: isChannel ? "Suggested type: Channel — verify" : isAngle ? "Suggested type: Angle — verify" : isPlate ? "Suggested type: Plate — verify" : isGusset ? "Suggested type: Gusset — verify" : "Select the type shown on the drawing",
     materialCode: "e.g. C11 or C16 (DXF token only)",
+    cuttingListIdentity: "Optional: enter the same approved common DXF filename/key only when different fixture DXFs are confirmed identical.",
     materialGrade: "Enter the full material callout from the drawing",
     gauge: "e.g. 16GA. or 11GA. — verify on drawing",
     crossSectionDimensions: isAngle ? 'e.g. 1" x 1 3/8"' : 'e.g. 7 11/16" x 9" x 7 11/16"',
@@ -721,7 +722,7 @@ function collectProjectBomData() {
           materialCode: component.materialCode || dxf?.materialCode || "",
           materialGrade: component.materialGrade || "",
           gauge: component.gauge || "",
-          dxf: dxf ? { originalFilename: dxf.originalFilename, fixtureTag: dxf.fixtureTag } : null
+          dxf: dxf ? { originalFilename: dxf.originalFilename, fixtureTag: dxf.fixtureTag, consolidationKey: component.cuttingListIdentity || "", outputFilename: component.cuttingListIdentity || dxf.originalFilename } : null
         };
       })
     });
@@ -737,9 +738,9 @@ function renderCuttingListPreview() {
   for (const fixture of fixtures) {
     for (const component of fixture.components) {
       if (!component.dxf) { noDxfCount++; continue; }
-      const key = [component.dxf.originalFilename.toLowerCase(), component.materialGrade.toUpperCase(), component.gauge.toUpperCase(), fixture.finish.toUpperCase()].join("|");
+      const key = [String(component.dxf.consolidationKey || component.dxf.originalFilename).toLowerCase(), String(component.materialGrade || "").toUpperCase(), String(component.gauge || "").toUpperCase(), String(fixture.finish || "").toUpperCase()].join("|");
       if (!groups.has(key)) groups.set(key, {
-        dxfFilename: component.dxf.originalFilename,
+        dxfFilename: component.dxf.outputFilename || component.dxf.originalFilename,
         material: component.materialGrade || component.materialCode || "",
         thickness: component.gauge || "",
         finish: fixture.finish || "",
