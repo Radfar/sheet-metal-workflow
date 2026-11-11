@@ -15,7 +15,7 @@ A Node.js web application for preparing fixture BOMs from SolidWorks BOM exports
        ├── part-02.DXF
        └── ...
    ```
-4. The application reads the SolidWorks BOM workbook and extracts the DXF filenames from the `DXF` subfolder. DXF file contents are not uploaded or analyzed.
+4. The application reads the SolidWorks BOM workbook and extracts the DXF filenames from the `DXF` subfolder. DXF files are fingerprinted locally with SHA-256 to detect byte-identical parts across selected fixtures; file contents are never uploaded.
 5. The drawing PDF is processed locally in the browser with PDF.js. Extracted text is displayed as reference material; it is not treated as verified engineering data automatically.
 6. The application matches BOM part numbers against parsed DXF filenames. Click **Build BOM Component Tree View** to display the match results.
 7. Review the BOM, correct matches and engineering data, then click **Generate BOM Excel File**.
