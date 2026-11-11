@@ -595,7 +595,7 @@ async function importFixtureFolder() {
   const dxfEntries = entries.filter(entry => {
     const parts = entry.path.split("/");
     return parts.length === 3 && parts[0] === tag && parts[1] === "DXF" && /\.dxf$/i.test(parts[2]);
-  });
+  }).sort((left, right) => left.path.localeCompare(right.path));
   if (!dxfEntries.length) throw new Error("No DXF files found. Expected files directly inside " + tag + "/DXF/.");
   button.disabled = true;
   status.textContent = "Reading the SolidWorks BOM and discovering DXF filenames…";
