@@ -204,15 +204,15 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
   function sectionHeadingText(section, payload) {
     const folderPrefix = section.key === "common"
-      ? section.title + " / laser_dxf\\\\"
-      : section.title + " / \\\\laser_dxf\\\\";
+      ? section.title + " / laser_dxf\\"
+      : section.title + " / \\laser_dxf\\";
     const folders = [
       clean(payload.customer),
       clean(payload.projectName),
       clean(payload.mountingComment),
       section.title
     ].filter(Boolean);
-    return folderPrefix + folders.join("\\\\");
+    return folderPrefix + folders.join("\\");
   }
 
   // Reset the template's sample content and row visibility before writing this order.
