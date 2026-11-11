@@ -739,7 +739,7 @@ function renderCuttingListPreview() {
   for (const fixture of fixtures) {
     for (const component of fixture.components) {
       if (!component.dxf) { noDxfCount++; continue; }
-      const key = [String(component.dxf.consolidationKey || component.dxf.originalFilename).toLowerCase(), String(component.materialGrade || "").toUpperCase(), String(component.gauge || "").toUpperCase(), String(component.cuttingListFinish || "").toUpperCase()].join("|");
+      const key = [String(component.dxf.consolidationKey || component.dxf.originalFilename).toLowerCase(), String(component.materialCode || "").toUpperCase(), String(component.materialGrade || "").toUpperCase(), String(component.gauge || "").toUpperCase(), String(component.cuttingListFinish || "").toUpperCase()].join("|");
       if (!groups.has(key)) groups.set(key, {
         dxfFilename: component.dxf.outputFilename || component.dxf.originalFilename,
         material: component.materialGrade || component.materialCode || "",
