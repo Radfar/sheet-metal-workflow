@@ -286,61 +286,75 @@ function convertShopInchDimensions(description) {
 }
 function buildShopStandardExportDescription(component) {
   const existingDescription = String(component.description ?? "").trim();
-  const segments = existingDescription.split(/\s+—\s+/).map(segment => segment.trim()).filter(Boolean);
+  const segments = existingDescription.split(/\\s+—\\s+/).map(segment => segment.trim()).filter(Boolean);
   const identity = segments.length > 1 ? segments.shift() : "";
   let description = segments.join(" ")
-    .replace(/Material code\s+C16\b/gi, "16GA.")
-    .replace(/Material code\s+C11\b/gi, "11GA.")
-    .replace(/\bchannel\b/gi, "Chn'l")
-    .replace(/\s+/g, " ").trim();
+    .replace(/Material code\\s+C16\\b/gi, "16GA.")
+    .replace(/Material code\\s+C11\\b/gi, "11GA.")
+    .replace(/\\bchannel\\b/gi, "Chn'l")
+    .replace(/\\s+/g, " ").trim();
 
   const partNumber = String(component.partNumber ?? "").trim().replace(/^"+|"+$/g, "");
   description = convertShopInchDimensions(description);
 
   if (partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3") {
-    description = description.replace(/\bFlat pattern\b/gi, "")
-      .replace(/\bPlate\b/gi, "").replace(/\bSplice\b/gi, "")
-      .replace(/\s+/g, " ").trim();
-    description = description.replace(partNumber, "").replace(/\s+/g, " ").trim();
-    const gauge = description.match(/\b(?:16|11)GA\./i)?.[0] || "";
+    description = description.replace(/\\bFlat pattern\\b/gi, "")
+      .replace(/\\bPlate\\b/gi, "").replace(/\\bSplice\\b/gi, "")
+      .replace(/\\s+/g, " ").trim();
+    description = description.replace(partNumber, "").replace(/\\s+/g, " ").trim();
+    const gauge = description.match(/\\b(?:16|11)GA\\./i)?.[0] || "";
     const dimensions = gauge ? description.replace(gauge, "").trim() : description;
     description = [dimensions, gauge, "Plt.", "(Laser)", "Splice"].filter(Boolean).join(" ");
   } else {
     const identitySource = identity + " " + partNumber;
-    const isEndcap = /END[\s_-]*CAP|ENDCAP/i.test(identitySource);
-    const isGusset = /GUSSET|\bGUS\b/i.test(identitySource);
-    const isShortAngle = /SHORT[\s_-]*ANG/i.test(partNumber) || /SHORT[\s_-]*ANGLE/i.test(identity);
-    const isT01ATroughSection = /^T01A-[ABC]$/i.test(partNumber);
+    const isEndcap = /END[\\s_-]*CAP|ENDCAP/i.test(identitySource);
+    const isGusset = /GUSSET|\\bGUS\\b/i.test(identitySource);
+    const isShortAngle = /SHORT[\\s_-]*ANG/i.test(partNumber) || /SHORT[\\s_-]*ANGLE/i.test(identity);
+    const isTroughSection = /TROUGH\\s+SECTION/i.test(identitySource);
 
-    if (isEndcap || isGusset || isShortAngle || isT01ATroughSection) {
+    if (isEndcap || isGusset || isShortAngle || isTroughSection) {
       let name = identity;
       if (isEndcap) {
-        name = name.replace(/\s+ENDCAP\s*$/i, "").replace(/\s+/g, " ").trim();
+        name = name.replace(/\\s+ENDCAP\\s*$/i, "").replace(/\\s+/g, " ").trim();
       } else if (isGusset) {
-        name = name.replace(/\s+REMOVABLE[-_ ]GUSSET\s*$/i, "")
-          .replace(/\bReturn\s+gusset\b/gi, "Gusset").replace(/\s+/g, " ").trim();
+        name = name.replace(/\\s+REMOVABLE[-_ ]GUSSET\\s*$/i, "")
+          .replace(/\\bReturn\\s+gusset\\b/gi, "Gusset").replace(/\\s+/g, " ").trim();
       } else if (isShortAngle) {
         // The shop name is only "Short Angle"; the SolidWorks part number is
         // appended separately in bold by the Excel exporter.
         name = "Short Angle";
+      } else if (isTroughSection) {
+        // Keep the approved identity, but remove the redundant Channel label
+        // when it appears immediately after "Trough section".
+        name = name.replace(/(Trough\\s+section)\\s+Channel\\b/i, "$1")
+          .replace(/\\s+/g, " ").trim();
       }
 
-      description = description.replace(/\bFlat pattern\b/gi, "")
-        .replace(/\s+/g, " ").trim();
-      const gauge = description.match(/\b(?:16|11)GA\./i)?.[0] || "";
+      description = description.replace(/\\bFlat pattern\\b/gi, "")
+        .replace(/\\s*\\(Laser(?:\\/SM)?\\)\\s*/gi, " ")
+        .replace(/\\s+/g, " ").trim();
+      const gauge = description.match(/\\b(?:16|11)GA\\./i)?.[0] || "";
       const dimensions = gauge ? description.replace(gauge, "").trim() : description;
-      const profile = isEndcap ? "Plt." : isGusset ? "Chn'l" : isT01ATroughSection ? "Trough section" : "";
-      description = [dimensions, gauge, profile, name].filter(Boolean).join(" ");
+
+      if (isEndcap) {
+        description = [dimensions, gauge, "Plt.", "(Laser)", name].filter(Boolean).join(" ");
+      } else if (isGusset) {
+        description = [dimensions, gauge, "Chn'l", "(Laser/SM)", name].filter(Boolean).join(" ");
+      } else if (isShortAngle) {
+        description = [dimensions, gauge, "(Laser/SM)", name].filter(Boolean).join(" ");
+      } else {
+        description = [dimensions, gauge, "(Laser/SM)", name].filter(Boolean).join(" ");
+      }
     } else {
       const sourceIdentity = description + " " + identity + " " + partNumber;
-      const isAngle = /\bAngle\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(sourceIdentity);
-      const isChannel = /\bChn'l\b/i.test(sourceIdentity);
+      const isAngle = /\\bAngle\\b|\\bANG\\b|[-_]ANG(?:[-_\\d]|$)/i.test(sourceIdentity);
+      const isChannel = /\\bChn'l\\b/i.test(sourceIdentity);
       const isT01AAngle = /^T01A-ANG-[123]$/i.test(partNumber);
       if (isAngle) {
-        description = description.replace(/\bFlat pattern\b/gi, "")
-          .replace(/\bAngle\b/gi, "").replace(/\bANG\b(?![-_]\d)/gi, "")
-          .replace(/\s+/g, " ").trim();
-        const gaugeMatch = description.match(/\b\d+GA\./i);
+        description = description.replace(/\\bFlat pattern\\b/gi, "")
+          .replace(/\\bAngle\\b/gi, "").replace(/\\bANG\\b(?![-_]\\d)/gi, "")
+          .replace(/\\s+/g, " ").trim();
+        const gaugeMatch = description.match(/\\b\\d+GA\\./i);
         if (gaugeMatch) {
           const gauge = gaugeMatch[0];
           description = description.replace(gauge, gauge + " Angle");
@@ -348,18 +362,18 @@ function buildShopStandardExportDescription(component) {
         if (isT01AAngle) {
           description = description + " (Laser/SM)";
         } else {
-          const angleIdentity = identity.replace(/^\s*Angle\s*/i, "").trim();
+          const angleIdentity = identity.replace(/^\\s*Angle\\s*/i, "").trim();
           if (angleIdentity) description = [description, angleIdentity].filter(Boolean).join(" ");
         }
       } else if (isChannel) {
-        description = description.replace(/\bFlat pattern\b/gi, "");
+        description = description.replace(/\\bFlat pattern\\b/gi, "");
         if (identity) description = [description, identity].filter(Boolean).join(" ");
       } else if (identity) {
         description = [description, identity].filter(Boolean).join(" ");
       }
     }
   }
-  return description.replace(/\s+/g, " ").trim();
+  return description.replace(/\\s+/g, " ").trim();
 }
 const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["cuttingListIdentity","Approved common DXF identity / filename","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["cuttingListFinish","Laser order finish (optional)","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
 
