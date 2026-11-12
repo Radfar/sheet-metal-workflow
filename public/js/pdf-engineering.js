@@ -156,7 +156,7 @@ function detectHardwareItems(lines, pageNumber, isTemplate = false) {
     else if (/\bNUT\b/i.test(callout) && /\b(?:C\s*\/\s*W|COMPLETE\s+WITH|WITH)\b/i.test(callout)) includedComponents.push("Nut (type not specified)");
 
     let fastenerType = "Fastener";
-    if (/\bRHMS\b/i.test(callout)) fastenerType = "Round Head Machine Screw (RHMS)";
+    if (/\bRHMS(?:x)?\b/i.test(callout)) fastenerType = "Round Head Machine Screw (RHMS)";
     else if (/\bRHCS\b/i.test(callout)) fastenerType = "Round Head Cap Screw (RHCS)";
     else if (/\bFHMS\b/i.test(callout)) fastenerType = "Flat Head Machine Screw (FHMS)";
     else if (/\bSHCS\b/i.test(callout)) fastenerType = "Socket Head Cap Screw (SHCS)";
