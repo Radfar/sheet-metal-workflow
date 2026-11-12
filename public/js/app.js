@@ -210,6 +210,54 @@ function makeDraftDescription(component, matchedDxf) {
   return buildShopBomDescription(component, matchedDxf).description;
 }
 
+// Build a second, comparison-only description using the historical shop ordering.
+// Engineering dimensions are used when entered; DXF flat-pattern dimensions remain
+// explicitly identified as flat-pattern data and are never relabelled as finished geometry.
+function buildShopStandardExportDescription(component) {
+  const value = key => String(component[key] ?? "").trim();
+  const matchedDxf = component.dxfIndex === "" || component.dxfIndex == null
+    ? null : dxfFiles[Number(component.dxfIndex)];
+  const materialCode = value("materialCode") || String(matchedDxf?.materialCode || "").trim();
+  const gauge = value("gauge") || ({C11:"11GA.", C16:"16GA."}[materialCode.toUpperCase()] || "");
+  const type = value("componentType") || inferredComponentType(component, matchedDxf);
+  const partId = value("partIdentification") || value("partNumber");
+  const quotedId = partId ? '"' + partId + '"' : "";
+  const process = value("manufacturingProcess");
+  let base = "";
+
+  if (type === "Plate") {
+    const width = value("plateLength") || value("flatPatternWidth") || String(matchedDxf?.flatWidth || "").trim();
+    const height = value("plateWidth") || value("flatPatternHeight") || String(matchedDxf?.flatHeight || "").trim();
+    const dimensions = [width, height].filter(Boolean).join('" x ');
+    base = [dimensions ? dimensions + (dimensions.endsWith('"') ? "" : '"') : "", gauge, "Plt.",
+      process ? "(" + process + ")" : "", quotedId].filter(Boolean).join(" ");
+  } else if (type === "Angle" || type === "Channel") {
+    const profile = type === "Channel" ? "Chn'l" : "Angle";
+    base = [value("crossSectionDimensions"), gauge, profile,
+      value("overallLength") ? "x " + value("overallLength") : "",
+      process ? "(" + process + ")" : "", quotedId].filter(Boolean).join(" ");
+    if (!value("crossSectionDimensions") && !value("overallLength")) {
+      base = [gauge, profile, quotedId].filter(Boolean).join(" ");
+    }
+  } else if (type === "Gusset") {
+    base = [value("geometryDimensions"), gauge, value("profileType"),
+      value("additionalDimensions") ? "x " + value("additionalDimensions") : "",
+      "Return Gusset", process ? "(" + process + ")" : "", quotedId]
+      .filter(Boolean).join(" ");
+    if (!value("geometryDimensions") && !value("additionalDimensions")) {
+      base = [gauge, "Return Gusset", quotedId].filter(Boolean).join(" ");
+    }
+  } else if (type === "Purchased hardware") {
+    base = [value("hardwareSize"), value("hardwareType"),
+      value("hardwareLength") ? "x " + value("hardwareLength") : ""].filter(Boolean).join(" ");
+  } else {
+    base = [gauge, type || inferredComponentName(component, matchedDxf), quotedId].filter(Boolean).join(" ");
+  }
+
+  if (!base) base = inferredComponentName(component, matchedDxf) + (partId ? ' "' + partId + '"' : "");
+  return appendDxfDetails(base, component, matchedDxf);
+}
+
 
 const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["cuttingListIdentity","Approved common DXF identity / filename","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["cuttingListFinish","Laser order finish (optional)","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
 
@@ -388,6 +436,7 @@ function updateLaserOrderButtonState() {
 function renderComponents() {
   $("rowCount").textContent = components.length + " BOM item" + (components.length === 1 ? "" : "s");
   $("exportBtn").disabled = components.length === 0;
+  $("exportShopBtn").disabled = components.length === 0;
   const body = $("componentRows");
 
   if (!components.length) {
@@ -1038,10 +1087,16 @@ $("generateSummaryBtn").addEventListener("click", () => {
   $("summaryStatus").className = "ok";
 });
 
-$("exportBtn").addEventListener("click", async () => {
-  const button = $("exportBtn");
+async function exportBomWorkbook(descriptionMode) {
+  const button = descriptionMode === "shop" ? $("exportShopBtn") : $("exportBtn");
+  const otherButton = descriptionMode === "shop" ? $("exportBtn") : $("exportShopBtn");
   button.disabled = true;
-  $("parseStatus").textContent = "Generating Excel BOM…";
+  otherButton.disabled = true;
+  const isShop = descriptionMode === "shop";
+  const status = $("bomExportStatus");
+  status.textContent = isShop ? "Generating shop-format BOM Excel…" : "Generating DXF-based BOM Excel…";
+  status.className = "status-text";
+  $("parseStatus").textContent = isShop ? "Generating shop-format Excel BOM…" : "Generating DXF-based Excel BOM…";
   $("parseStatus").className = "status-text";
 
   try {
@@ -1060,7 +1115,9 @@ $("exportBtn").addEventListener("click", async () => {
         itemNo:component.itemNo,
         partNumber:component.partNumber,
         quantityPerAssembly:component.quantityPerAssembly,
-        description:component.description
+        description:isShop
+          ? buildShopStandardExportDescription(component)
+          : component.description
       }))
     };
 
@@ -1078,7 +1135,8 @@ $("exportBtn").addEventListener("click", async () => {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = makeBomFilename();
+    const baseFilename = makeBomFilename().replace(/\.xlsx$/i, "");
+    anchor.download = baseFilename + (isShop ? " - Shop Standard.xlsx" : " - DXF-Based.xlsx");
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
@@ -1093,21 +1151,30 @@ $("exportBtn").addEventListener("click", async () => {
     renderSummary();
     $("summaryStatus").textContent = currentFixtureTag + " BOM Excel generated and marked complete.";
     $("summaryStatus").className = "ok";
-    $("parseStatus").textContent = "Excel BOM generated. " +
-      (missing ? missing + " description(s) are blank; review the workbook before release." : "All manufacturing descriptions are populated.");
+    const modeLabel = isShop ? "Shop-format" : "DXF-based";
+    status.textContent = modeLabel + " BOM downloaded. Generate the other version for comparison.";
+    status.className = "ok";
+    $("parseStatus").textContent = modeLabel + " Excel BOM generated. " +
+      (missing ? missing + " description(s) are blank; review the workbook before release." : "Descriptions are populated.");
     $("parseStatus").className = missing ? "status-text" : "ok";
-    $("folderImportReview").textContent = currentFixtureTag + " BOM Excel file generated successfully." +
+    $("folderImportReview").textContent = currentFixtureTag + " " + modeLabel + " BOM Excel file generated successfully." +
       (missing ? " " + missing + " description(s) remain blank and need review." : "");
     $("folderImportReview").className = missing ? "status-text" : "ok";
   } catch (error) {
+    status.textContent = error.message;
+    status.className = "error";
     $("parseStatus").textContent = error.message;
     $("parseStatus").className = "error";
     $("folderImportReview").textContent = "BOM Excel generation failed: " + error.message;
     $("folderImportReview").className = "error";
   } finally {
     button.disabled = components.length === 0;
+    otherButton.disabled = components.length === 0;
   }
-});
+}
+
+$("exportBtn").addEventListener("click", () => exportBomWorkbook("dxf"));
+$("exportShopBtn").addEventListener("click", () => exportBomWorkbook("shop"));
 
 
 function collectProjectBomData() {
