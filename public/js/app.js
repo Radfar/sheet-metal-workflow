@@ -306,7 +306,7 @@ function buildShopStandardExportDescription(component) {
       const gauge = gaugeMatch[0];
       const dimensions = description.replace(/\bFlat pattern\b/gi, "")
         .replace(gauge, "").replace(/\bPlate\b/gi, "")
-        .replace(/\bSplice\b/gi, "").replace(/\s+/g, " ").trim();
+        .replace(/\bSplice\b(?!-PLT)/gi, "").replace(/\s+/g, " ").trim();
       description = [dimensions, gauge, "Plt.", "(Laser)", "Splice"]
         .filter(Boolean).join(" ");
     } else {
