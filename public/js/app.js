@@ -124,8 +124,8 @@ function matchDxfIndex(partNumber, files, fixtureTag) {
 
   return bestScore >= 70 ? bestIndex : "";
 }
-function inferredComponentType(component) {
-  const source = [component.partNumber, component.description].filter(Boolean).join(" ").toUpperCase();
+function inferredComponentType(component, matchedDxf = null) {
+  const source = [component.partNumber, component.description, matchedDxf?.componentLabel].filter(Boolean).join(" ").toUpperCase();
   if (/SHORT[\\s_-]*ANG/.test(source)) return "Angle";
   if (/\\bANG(?:LE)?\\b|[-_]ANG[-_\\d]/.test(source)) return "Angle";
   if (/CHN|CHANNEL|TROUGH/.test(source)) return "Channel";
@@ -134,8 +134,8 @@ function inferredComponentType(component) {
   return component.componentType || "";
 }
 
-function inferredComponentName(component) {
-  const source = [component.partNumber, component.description].filter(Boolean).join(" ").toUpperCase();
+function inferredComponentName(component, matchedDxf = null) {
+  const source = [component.partNumber, component.description, matchedDxf?.componentLabel].filter(Boolean).join(" ").toUpperCase();
   if (/SHORT[\\s_-]*ANG/.test(source)) return "Short angle";
   if (/END[\\s_-]*CAP|ENDCAP/.test(source)) return "End cap";
   if (/SPLICE[\\s_-]*PLT|SPLICE[\\s_-]*PLATE/.test(source)) return "Splice plate";
@@ -158,7 +158,7 @@ function appendDxfDetails(description, component, matchedDxf) {
 
 function buildShopBomDescription(component, matchedDxf = null) {
   const value = key => String(component[key] ?? "").trim();
-  const type = value("componentType") || inferredComponentType(component);
+  const type = value("componentType") || inferredComponentType(component, matchedDxf);
   const gauge = value("gauge");
   const process = value("manufacturingProcess");
   const partId = value("partIdentification") || value("partNumber");
@@ -200,7 +200,7 @@ function buildShopBomDescription(component, matchedDxf = null) {
 
   if (!base) {
     const partNumber = value("partNumber") || value("partIdentification");
-    base = inferredComponentName(component) + (partNumber ? " " + partNumber : "") +
+    base = inferredComponentName(component, matchedDxf) + (partNumber ? " " + partNumber : "") +
       (process ? " (" + process + ")" : "");
   }
   return { description: appendDxfDetails(base, component, matchedDxf), missing: [] };
