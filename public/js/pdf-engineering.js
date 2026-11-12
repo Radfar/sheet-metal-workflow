@@ -133,11 +133,16 @@ function detectHardwareItems(lines, pageNumber, isTemplate = false) {
 
     // Join a nearby continuation such as "C/W HEX NYLOK NUT" to the
     // fastener callout above it. Keep the original line text for traceability.
-    const continuation = lines[index + 1];
-    const continuationText = continuation && Math.abs(Number(line.y) - Number(continuation.y)) <= 24
-      ? clean(continuation.text)
-      : "";
-    const hasIncludedComponent = /\b(?:C\s*\/\s*W|COMPLETE\s+WITH|WITH)\b/i.test(continuationText);
+    if (/^C\\s*\\/\\s*W\\b/i.test(text)) continue;
+
+    const continuation = lines.find((candidateLine, candidateIndex) =>
+      candidateIndex !== index &&
+      Math.abs(Number(line.y) - Number(candidateLine.y)) <= 24 &&
+      /\\b(?:C\\s*\\/\\s*W|COMPLETE\\s+WITH|WITH)\\b/i.test(clean(candidateLine.text)) &&
+      /\\bNUT\\b/i.test(clean(candidateLine.text))
+    );
+    const continuationText = continuation ? clean(continuation.text) : "";
+    const hasIncludedComponent = Boolean(continuationText);
     const callout = clean(text + (hasIncludedComponent ? " " + continuationText : ""));
 
     const quantityMatch = callout.match(/\(\s*(\d+(?:\.\d+)?)\s*(SETS?|PCS?|PIECES?|EA(?:CH)?)\s*\)/i)
