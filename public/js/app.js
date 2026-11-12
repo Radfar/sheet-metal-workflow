@@ -303,14 +303,17 @@ function buildShopStandardExportDescription(component) {
   }
   description = convertShopInchDimensions(description);
   if (partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3") {
-    const gaugeMatch = description.match(/\b\d+GA\./i);
+    const gaugeMatch = description.match(/\b(?:16|11)GA\./i);
     if (gaugeMatch) {
       const gauge = gaugeMatch[0];
-      const remaining = description.replace(/\bFlat pattern\b/gi, "").replace(gauge, "")
-        .replace(/\bPlate\b/gi, "").replace(/\s+/g, " ").trim();
-      description = (gauge + " Plt. " + remaining).replace(/\s+/g, " ").trim();
+      const dimensions = description.replace(/\bFlat pattern\b/gi, "")
+        .replace(gauge, "").replace(/\bPlate\b/gi, "")
+        .replace(/\bSplice\b/gi, "").replace(/\s+/g, " ").trim();
+      description = [dimensions, gauge, "Plt.", "(Laser)", "Splice"]
+        .filter(Boolean).join(" ");
     } else {
-      description = description.replace(/\bFlat pattern\b/gi, "Plt.");
+      description = description.replace(/\bFlat pattern\b/gi, "").replace(/\bPlate\b/gi, "")
+        .replace(/\s+/g, " ").trim() + " (Laser) Splice";
     }
   } else {
     const isAngle = /\bAngle\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(description + " " + partNumber);
