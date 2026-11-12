@@ -42,6 +42,7 @@
     </div>
 
     <div hidden>
+    <button id="buildComponentTreeBtn" type="button" disabled>Legacy component tree</button>
     <div class="fixture-picker">
       <label for="fixtureSelect">Fixture tag</label>
       <select id="fixtureSelect"></select>
@@ -153,7 +154,7 @@
 
   <section class="panel">
     <div class="heading"><h2><b>03</b> Project schedule summary</h2><small>Import and export status</small></div>
-    <div class="actions"><span id="summaryStatus" class="status-text">Select a project folder to populate the schedule summary.</span></div>
+    <div class="actions"><button id="generateSummaryBtn" type="button" hidden>Legacy summary refresh</button><span id="summaryStatus" class="status-text">Select a project folder to populate the schedule summary.</span></div>
     <div class="table-wrap summary-wrap">
       <table class="summary-table">
         <thead><tr><th>#</th><th>Tag</th><th>Mounting</th><th>Profile</th><th>Width</th><th>Length</th><th>Finish</th><th>Qty</th><th>BOM items</th><th>Import status</th><th>Shop BOM</th><th>DXF BOM</th><th>Include in Laser Order</th></tr></thead>
