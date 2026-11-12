@@ -438,7 +438,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           const baseFont = { ...(descriptionCell.font || {}) };
           const richText = [];
           const isSplicePlate = partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3";
-          if (description && (isSplicePlate || description.includes("(Laser/SM)"))) {
+          if (description && (isSplicePlate || description.includes("(Laser/SM)") || description.includes("(Laser)"))) {
             const laserMarker = description.includes("(Laser/SM)") ? "(Laser/SM)" : "(Laser)";
             const laserIndex = description.lastIndexOf(laserMarker);
             if (laserIndex >= 0) {
