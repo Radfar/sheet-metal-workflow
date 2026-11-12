@@ -1012,6 +1012,7 @@ async function importProjectRoot(entries, rootName) {
   }
   if (!discovered.size) throw new Error("No fixture folders matching the project schedule were found inside " + rootName + ".");
   importedProjectTags = [];
+  selectedProjectRootName = rootName;
   const failures = [];
   for (const tag of tags) {
     if (!discovered.has(tag)) continue;
@@ -1022,7 +1023,6 @@ async function importProjectRoot(entries, rootName) {
       failures.push(tag + ": " + error.message);
     }
   }
-  selectedProjectRootName = rootName;
   renderSummary();
   $("fixtureFolderStatus").textContent = "Project folder " + rootName + ": " + importedProjectTags.length +
     " fixture folder(s) imported; " + failures.length + " require attention.";
