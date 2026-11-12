@@ -287,9 +287,7 @@ function convertShopInchDimensions(description) {
 function buildShopStandardExportDescription(component) {
   const existingDescription = String(component.description ?? "").trim();
   const segments = existingDescription.split(/\s+—\s+/).map(segment => segment.trim()).filter(Boolean);
-  const componentIdentity = segments.length > 1 ? segments.shift() : "";
-  if (componentIdentity) segments.push(componentIdentity);
-
+  const identity = segments.length > 1 ? segments.shift() : "";
   let description = segments.join(" ")
     .replace(/Material code\s+C16\b/gi, "16GA.")
     .replace(/Material code\s+C11\b/gi, "11GA.")
@@ -300,68 +298,56 @@ function buildShopStandardExportDescription(component) {
   description = convertShopInchDimensions(description);
 
   if (partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3") {
-    const escapedPartNumber = partNumber.replace(/[|\\{}()[\]^$+*?.]/g, "\\    const gaugeMatch = description.match(/\b(?:16|11)GA\./i);
-    if (gaugeMatch) {
-      const gauge = gaugeMatch[0];
-      const dimensions = description.replace(/\bFlat pattern\b/gi, "")
-        .replace(gauge, "").replace(/\bPlate\b/gi, "")
-        .replace(/\bSplice\b(?!-PLT)/gi, "").replace(/\s+/g, " ").trim();");
-    if (partNumber) description = description.replace(new RegExp("\\s*" + escapedPartNumber, "i"), "");
-    const gaugeMatch = description.match(/\b(?:16|11)GA\./i);
-    if (gaugeMatch) {
-      const gauge = gaugeMatch[0];
-      const dimensions = description.replace(/\bFlat pattern\b/gi, "")
-        .replace(gauge, "").replace(/\bPlate\b/gi, "")
-        .replace(/\bSplice\b/gi, "").replace(/\s+/g, " ").trim();
-      description = [dimensions, gauge, "Plt.", "(Laser)", "Splice"].filter(Boolean).join(" ");
-    } else {
-      description = description.replace(/\bFlat pattern\b/gi, "").replace(/\bPlate\b/gi, "")
-        .replace(/\s+/g, " ").trim() + " (Laser) Splice";
-    }
+    description = description.replace(/\bFlat pattern\b/gi, "")
+      .replace(/\bPlate\b/gi, "").replace(/\bSplice\b/gi, "")
+      .replace(/\s+/g, " ").trim();
+    description = description.replace(partNumber, "").replace(/\s+/g, " ").trim();
+    const gauge = description.match(/\b(?:16|11)GA\./i)?.[0] || "";
+    const dimensions = gauge ? description.replace(gauge, "").trim() : description;
+    description = [dimensions, gauge, "Plt.", "(Laser)", "Splice"].filter(Boolean).join(" ");
   } else {
-    const identity = componentIdentity || description;
-    const isEndcap = /END[\s_-]*CAP|ENDCAP/i.test(identity + " " + partNumber);
-    const isGusset = /GUSSET|\bGUS\b/i.test(identity + " " + partNumber);
+    const identitySource = identity + " " + partNumber;
+    const isEndcap = /END[\s_-]*CAP|ENDCAP/i.test(identitySource);
+    const isGusset = /GUSSET|\bGUS\b/i.test(identitySource);
     const isShortAngle = /SHORT[\s_-]*ANG/i.test(partNumber) || /SHORT[\s_-]*ANGLE/i.test(identity);
     const isT01ATroughSection = /^T01A-[ABC]$/i.test(partNumber);
-    const gaugeMatch = description.match(/\b(?:16|11)GA\./i);
 
     if (isEndcap || isGusset || isShortAngle || isT01ATroughSection) {
-      description = description.replace(/\bFlat pattern\b/gi, "").replace(/\s+/g, " ").trim();
-      let name = identity || description;
+      let name = identity;
       if (isEndcap) {
         name = name.replace(/\s+ENDCAP\s*$/i, "").replace(/\s+/g, " ").trim();
       } else if (isGusset) {
         name = name.replace(/\s+REMOVABLE[-_ ]GUSSET\s*$/i, "")
-          .replace(/\bReturn\s+gusset\b/gi, "Gusset")
-          .replace(/\s+/g, " ").trim();
+          .replace(/\bReturn\s+gusset\b/gi, "Gusset").replace(/\s+/g, " ").trim();
       } else if (isShortAngle) {
-        name = name.replace(/\bshort\s+angle\b/gi, "Short Angle")
-          .replace(/\s+/g, " ").trim();
+        name = name.replace(/\bshort\s+angle\b/gi, "Short Angle").replace(/\s+/g, " ").trim();
       }
 
-      // Remove the original identity segment before rebuilding its normalized shop name.
-      description = description.replace(identity, "").replace(/\s+/g, " ").trim();
-      if (gaugeMatch) {
-        const gauge = gaugeMatch[0];
-        const profile = isEndcap ? "Plt." : (isGusset || isT01ATroughSection) ? "Chn'l" : "Short Angle";
-        description = description.replace(gauge, gauge + " " + profile);
-      }
-      if (name) description = [description, name].filter(Boolean).join(" ");
+      description = description.replace(/\bFlat pattern\b/gi, "")
+        .replace(/\s+/g, " ").trim();
+      const gauge = description.match(/\b(?:16|11)GA\./i)?.[0] || "";
+      const dimensions = gauge ? description.replace(gauge, "").trim() : description;
+      const profile = isEndcap ? "Plt." : (isGusset || isT01ATroughSection) ? "Chn'l" : "Short Angle";
+      description = [dimensions, gauge, profile, name].filter(Boolean).join(" ");
     } else {
-      const isAngle = /\bAngle\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(description + " " + partNumber);
-      const isChannel = /\bChn'l\b/i.test(description);
+      const sourceIdentity = description + " " + identity + " " + partNumber;
+      const isAngle = /\bAngle\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(sourceIdentity);
+      const isChannel = /\bChn'l\b/i.test(sourceIdentity);
       if (isAngle) {
         description = description.replace(/\bFlat pattern\b/gi, "")
           .replace(/\bAngle\b/gi, "").replace(/\bANG\b(?![-_]\d)/gi, "")
           .replace(/\s+/g, " ").trim();
-        const angleGauge = description.match(/\b\d+GA\./i);
-        if (angleGauge) {
-          const gauge = angleGauge[0];
+        const gaugeMatch = description.match(/\b\d+GA\./i);
+        if (gaugeMatch) {
+          const gauge = gaugeMatch[0];
           description = description.replace(gauge, gauge + " Angle");
         }
+        if (identity) description = [description, identity].filter(Boolean).join(" ");
       } else if (isChannel) {
         description = description.replace(/\bFlat pattern\b/gi, "");
+        if (identity) description = [description, identity].filter(Boolean).join(" ");
+      } else if (identity) {
+        description = [description, identity].filter(Boolean).join(" ");
       }
     }
   }
