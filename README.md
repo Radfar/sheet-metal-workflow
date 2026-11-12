@@ -129,3 +129,28 @@ Current limitation: project, fixture BOMs, generated-status flags and selected l
 - If no gauge can be determined from C11/C16 and no verified gauge is entered in the BOM component, export stops and asks for engineering review.
 - The K column finish uses a component-specific cutting-list finish when supplied; otherwise it falls back to the fixture schedule finish.
 - The exported filename follows `{Laser order number} {order date}-{ship date}.xlsx`; dates in the same month are compacted (for example, `RA-5075 Jul 02-26.xlsx`).
+
+
+## Project-root batch workflow
+
+Select the parent project folder once. It should contain one folder per fixture unit, using fixture tags from the project schedule (for example, T01A, T01B and T01C). Each fixture folder must contain:
+- One SolidWorks BOM workbook (.xls or .xlsx), preferably inside a folder named "SolidWorks BOM" or "BOM".
+- One drawing PDF, preferably named exactly after the fixture tag (for example, T01A.pdf).
+- One or more DXF files inside a folder named "DXF".
+
+An optional "Excel" folder may contain previous or generated workbooks; those workbooks are excluded from source BOM discovery. The app reports missing or ambiguous files per fixture. Use the batch buttons to generate one DXF-Based or Shop-Format workbook per successfully imported fixture. The detailed BOM Component Tree View is not part of the project-root workflow.
+
+Example:
+```text
+Project Root/
+├── T01A/
+│   ├── DXF/
+│   ├── Drawing PDF/T01A.pdf
+│   ├── SolidWorks BOM/T01A.xlsx
+│   └── Excel/                 (optional previous exports)
+├── T01B/
+│   ├── DXF/
+│   ├── Drawing PDF/T01B.pdf
+│   └── SolidWorks BOM/T01B.xlsx
+└── ...
+```
