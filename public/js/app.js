@@ -955,6 +955,15 @@ $("componentRows").addEventListener("input", event => {
   if (input.dataset.componentField === "description") {
     components[index].descriptionDraft = false;
     components[index].descriptionOrigin = "manual";
+  } else if (components[index].descriptionDraft) {
+    // Keep the automatic BOM description synchronized as engineering values
+    // are entered. A manually edited description is never overwritten.
+    const matchedDxf = components[index].dxfIndex === "" || components[index].dxfIndex == null
+      ? null : dxfFiles[Number(components[index].dxfIndex)];
+    components[index].description = buildShopBomDescription(components[index], matchedDxf).description;
+    const componentRow = input.closest("tr").previousElementSibling;
+    const descriptionInput = componentRow?.querySelector('[data-component-field="description"]');
+    if (descriptionInput) descriptionInput.value = components[index].description;
   }
   const line = bomLines.find(entry =>
     entry.itemNo === components[index].itemNo && entry.partNumber === components[index].partNumber
@@ -964,6 +973,10 @@ $("componentRows").addEventListener("input", event => {
     if (input.dataset.componentField === "description") {
       line.descriptionDraft = false;
       line.descriptionOrigin = "manual";
+    } else if (components[index].descriptionDraft) {
+      line.description = components[index].description;
+      line.descriptionDraft = true;
+      line.descriptionOrigin = "generated";
     }
   }
   saveCurrentFixture();
