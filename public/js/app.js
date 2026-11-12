@@ -792,6 +792,13 @@ function renderEngineeringExtraction(data) {
     " · BOM-like rows: " + (data.bomRows?.length || 0);
 
   jsonEl.value = JSON.stringify(data, null, 2);
+  const saveBtn = $("saveEngineeringJsonBtn");
+  if (saveBtn) saveBtn.disabled = false;
+  const jsonStatus = $("engineeringJsonStatus");
+  if (jsonStatus) {
+    jsonStatus.textContent = "Extraction is ready. Save this JSON to keep a reviewable copy in the repository.";
+    jsonStatus.className = "status-text";
+  }
 }
 
 function resetFolderValidation(message = "Select the current fixture folder.") {
