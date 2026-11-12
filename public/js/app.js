@@ -338,7 +338,7 @@ function buildShopStandardExportDescription(component) {
       }
     } else if (isAngle) {
       description = description.replace(/\bFlat pattern\b/gi, "")
-        .replace(/\bAngle\b/gi, "").replace(/\bANG\b/gi, "")
+        .replace(/\bAngle\b/gi, "").replace(/\bANG\b(?![-_]\d)/gi, "")
         .replace(/\s+/g, " ").trim();
       const angleGauge = description.match(/\b\d+GA\./i);
       if (angleGauge) {
