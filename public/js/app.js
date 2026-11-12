@@ -314,9 +314,9 @@ function buildShopStandardExportDescription(component) {
     // Require a fixture-style part ID and a source channel/trough descriptor
     // so ordinary channel components keep their existing generic format.
     const troughSource = identitySource + " " + description;
-    const isFixtureTroughPart = /^T\\d+[A-Z]?-[A-Z]$/i.test(partNumber) &&
-      /\\bTROUGH\\b|\\bCHANNEL\\b|\\bCHN'L\\b/i.test(troughSource);
-    const isTroughSection = isFixtureTroughPart || /TROUGH\\s+SECTION/i.test(troughSource);
+    const isFixtureTroughPart = /^T\d+[A-Z]?-[A-Z]$/i.test(partNumber) &&
+      /\bTROUGH\b|\bCHANNEL\b|\bCHN'L\b/i.test(troughSource);
+    const isTroughSection = isFixtureTroughPart || /\bTROUGH\s+SECTION\b/i.test(troughSource);
 
     if (isEndcap || isGusset || isShortAngle || isTroughSection) {
       let name = identity;
