@@ -1,5 +1,5 @@
 export function discoverProjectFixtureEntries(entries, rootName, scheduleTags) {
-  const normalizedRoot = String(rootName || "").split("\\").join("/").replace(/^\\/+|\\/+$/g, "");
+  const normalizedRoot = String(rootName || "").split("\\").join("/");
   const tags = (scheduleTags || []).map(tag => String(tag));
   const discovered = new Map();
   for (const entry of entries || []) {
