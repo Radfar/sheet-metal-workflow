@@ -310,7 +310,7 @@ function buildShopStandardExportDescription(component) {
     const isEndcap = /END[\\s_-]*CAP|ENDCAP/i.test(identitySource);
     const isGusset = /GUSSET|\\bGUS\\b/i.test(identitySource);
     const isShortAngle = /SHORT[\\s_-]*ANG/i.test(partNumber) || /SHORT[\\s_-]*ANGLE/i.test(identity);
-    const isTroughSection = /TROUGH\\s+SECTION/i.test(identitySource);
+    const isTroughSection = /TROUGH\\s+SECTION/i.test(identitySource + " " + description);
 
     if (isEndcap || isGusset || isShortAngle || isTroughSection) {
       let name = identity;
@@ -326,7 +326,7 @@ function buildShopStandardExportDescription(component) {
       } else if (isTroughSection) {
         // Keep the approved identity, but remove the redundant Channel label
         // when it appears immediately after "Trough section".
-        name = name.replace(/(Trough\\s+section)\\s+Channel\\b/i, "$1")
+        name = name.replace(/(Trough\\s+section)(?:\\s+Channel\\b)/i, "$1")
           .replace(/\\s+/g, " ").trim();
       }
 
