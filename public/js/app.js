@@ -300,12 +300,19 @@ function buildShopStandardExportDescription(component) {
   description = convertShopInchDimensions(description);
 
   if (partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3") {
+    const escapedPartNumber = partNumber.replace(/[|\\{}()[\]^$+*?.]/g, "\\    const gaugeMatch = description.match(/\b(?:16|11)GA\./i);
+    if (gaugeMatch) {
+      const gauge = gaugeMatch[0];
+      const dimensions = description.replace(/\bFlat pattern\b/gi, "")
+        .replace(gauge, "").replace(/\bPlate\b/gi, "")
+        .replace(/\bSplice\b(?!-PLT)/gi, "").replace(/\s+/g, " ").trim();");
+    if (partNumber) description = description.replace(new RegExp("\\s*" + escapedPartNumber, "i"), "");
     const gaugeMatch = description.match(/\b(?:16|11)GA\./i);
     if (gaugeMatch) {
       const gauge = gaugeMatch[0];
       const dimensions = description.replace(/\bFlat pattern\b/gi, "")
         .replace(gauge, "").replace(/\bPlate\b/gi, "")
-        .replace(/\bSplice\b(?!-PLT)/gi, "").replace(/\s+/g, " ").trim();
+        .replace(/\bSplice\b/gi, "").replace(/\s+/g, " ").trim();
       description = [dimensions, gauge, "Plt.", "(Laser)", "Splice"].filter(Boolean).join(" ");
     } else {
       description = description.replace(/\bFlat pattern\b/gi, "").replace(/\bPlate\b/gi, "")
@@ -333,15 +340,14 @@ function buildShopStandardExportDescription(component) {
           .replace(/\s+/g, " ").trim();
       }
 
+      // Remove the original identity segment before rebuilding its normalized shop name.
+      description = description.replace(identity, "").replace(/\s+/g, " ").trim();
       if (gaugeMatch) {
         const gauge = gaugeMatch[0];
         const profile = isEndcap ? "Plt." : (isGusset || isT01ATroughSection) ? "Chn'l" : "Short Angle";
         description = description.replace(gauge, gauge + " " + profile);
       }
-      if (name) {
-        const withoutIdentity = description.replace(name, "").replace(/\s+/g, " ").trim();
-        description = [withoutIdentity, name].filter(Boolean).join(" ");
-      }
+      if (name) description = [description, name].filter(Boolean).join(" ");
     } else {
       const isAngle = /\bAngle\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(description + " " + partNumber);
       const isChannel = /\bChn'l\b/i.test(description);
