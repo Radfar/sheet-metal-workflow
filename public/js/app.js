@@ -759,6 +759,8 @@ function renderEngineeringExtraction(data) {
     summaryEl.textContent = "No engineering PDF data extracted yet.";
     fieldsEl.innerHTML = "";
     jsonEl.value = "";
+    const saveBtn = $("saveEngineeringJsonBtn");
+    if (saveBtn) saveBtn.disabled = true;
     return;
   }
 
