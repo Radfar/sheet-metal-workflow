@@ -1004,6 +1004,7 @@ async function importProjectRoot(entries, rootName) {
   importedProjectTags = [];
   $("projectBatchActions").hidden = true;
   $("projectBatchStatus").textContent = "Discovering fixture folders…";
+  renderSummary();
   const tags = schedule.map(item => item.tag);
   const discovered = discoverProjectFixtureEntries(entries, rootName, tags);
   if (!discovered.size) throw new Error("No fixture folders matching the project schedule were found inside " + rootName + ".");
