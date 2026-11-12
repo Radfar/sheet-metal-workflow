@@ -437,7 +437,20 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
         if (shopFormat && partNumber) {
           const baseFont = { ...(descriptionCell.font || {}) };
           const richText = [];
-          if (description) {
+          const isSplicePlate = partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3";
+          if (description && isSplicePlate) {
+            const laserMarker = "(Laser)";
+            const laserIndex = description.lastIndexOf(laserMarker);
+            if (laserIndex >= 0) {
+              const beforeLaser = description.slice(0, laserIndex).trimEnd();
+              const afterLaser = description.slice(laserIndex + laserMarker.length).trim();
+              if (beforeLaser) richText.push({ text: beforeLaser + " ", font: baseFont });
+              richText.push({ text: laserMarker, font: { ...baseFont, bold: true } });
+              if (afterLaser) richText.push({ text: " " + afterLaser + " ", font: baseFont });
+            } else {
+              richText.push({ text: description + " ", font: baseFont });
+            }
+          } else if (description) {
             richText.push({ text: description + " ", font: baseFont });
           }
           richText.push({
