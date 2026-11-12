@@ -111,6 +111,12 @@
       </div>
       <details>
         <summary>Structured extraction JSON</summary>
+        <div class="file-actions">
+          <button id="saveEngineeringJsonBtn" class="secondary" type="button" disabled>Save extraction JSON</button>
+          <input id="importEngineeringJsonFile" type="file" accept=".json,application/json" hidden>
+          <button id="importEngineeringJsonBtn" class="secondary" type="button">Import saved extraction JSON</button>
+          <span id="engineeringJsonStatus" class="status-text">Save the extracted JSON, commit it to the repository, and import it later for review.</span>
+        </div>
         <textarea id="engineeringExtractionJson" rows="16" readonly></textarea>
       </details>
     </details>
