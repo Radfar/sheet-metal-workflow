@@ -254,47 +254,23 @@ function quoteShopPartId(value) {
   return partId ? '"' + partId + '"' : "";
 }
 
-// Build a separate shop-standard description. It uses only entered
-// manufacturing data; DXF flat-pattern dimensions and material codes are
-// intentionally excluded from this export.
+// Shop-format export is a presentation-only rearrangement of the existing
+// DXF-based BOM description. Keep every existing text segment unchanged;
+// move the DXF-derived details (flat-pattern dimensions/material code) before
+// the component identity. Do not derive or add manufacturing information.
 function buildShopStandardExportDescription(component) {
-  const value = key => String(component[key] ?? "").trim();
-  const type = value("componentType") || inferredComponentType(component);
-  const gauge = value("gauge");
-  const process = value("manufacturingProcess");
-  const partId = quoteShopPartId(value("partIdentification") || value("partNumber"));
-  const processText = process ? "(" + process.replace(/^\(|\)$/g, "") + ")" : "";
-  let description = "";
+  const existingDescription = String(component.description ?? "").trim();
+  if (!existingDescription) return "";
 
-  if (type === "Channel" || type === "Angle") {
-    const dimensions = formatShopDimensionSequence(value("crossSectionDimensions"));
-    const profile = type === "Channel" ? "Chn'l" : "Angle";
-    const finishedLength = formatShopDimension(value("overallLength"));
-    description = [dimensions, gauge, profile,
-      finishedLength ? "x " + finishedLength : "",
-      processText, partId].filter(Boolean).join(" ");
-  } else if (type === "Plate") {
-    // Only explicit finished-part plate dimensions are valid here.
-    // Never substitute flatPatternWidth/Height or matched DXF dimensions.
-    const dimensions = [formatShopDimension(value("plateLength")),
-      formatShopDimension(value("plateWidth"))].filter(Boolean).join(" x ");
-    description = [dimensions, gauge, "Plt.", processText, partId]
-      .filter(Boolean).join(" ");
-  } else if (type === "Gusset") {
-    const geometry = formatShopDimensionSequence(value("geometryDimensions"));
-    const additional = formatShopDimensionSequence(value("additionalDimensions"));
-    description = [geometry, gauge, "Chn'l",
-      additional ? "x " + additional : "",
-      "Return Gusset", processText].filter(Boolean).join(" ");
-  } else if (type === "Purchased hardware") {
-    description = [value("hardwareSize"), value("hardwareType"),
-      value("hardwareLength") ? "x " + formatShopDimension(value("hardwareLength")) : ""]
-      .filter(Boolean).join(" ");
-  } else {
-    description = [gauge, type || inferredComponentName(component),
-      processText, partId].filter(Boolean).join(" ");
-  }
-  return description.trim();
+  const segments = existingDescription
+    .split(/\s+—\s+/)
+    .map(segment => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length < 2) return existingDescription;
+
+  const componentIdentity = segments.shift();
+  return [...segments, componentIdentity].join(" — ");
 }
 
 const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["cuttingListIdentity","Approved common DXF identity / filename","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["cuttingListFinish","Laser order finish (optional)","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
