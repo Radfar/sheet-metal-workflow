@@ -200,7 +200,8 @@ function buildShopBomDescription(component, matchedDxf = null) {
 
   if (!base) {
     const partNumber = value("partNumber") || value("partIdentification");
-    base = inferredComponentName(component) + (partNumber ? " " + partNumber : "");
+    base = inferredComponentName(component) + (partNumber ? " " + partNumber : "") +
+      (process ? " (" + process + ")" : "");
   }
   return { description: appendDxfDetails(base, component, matchedDxf), missing: [] };
 }
