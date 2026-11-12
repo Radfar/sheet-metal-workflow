@@ -281,29 +281,9 @@ function buildShopStandardExportDescription(component) {
   // Remove it from the description first if it is already present at the end.
   const partNumber = String(component.partNumber ?? "").trim().replace(/^"+|"+$/g, "");
   if (partNumber) {
-    const escapedPartNumber = partNumber.replace(/[.*+?^\${}()|[\]\\]/g, "\\function buildShopStandardExportDescription(component) {
-  const existingDescription = String(component.description ?? "").trim();
-  if (!existingDescription) return "";
-
-  const segments = existingDescription
-    .split(/\s+—\s+/)
-    .map(segment => segment.trim())
-    .filter(Boolean);
-
-  if (segments.length > 1) {
-    const componentIdentity = segments.shift();
-    segments.push(componentIdentity);
-  }
-
-  return segments.join(" ")
-    .replace(/Material code\s+C16\b/gi, "16GA.")
-    .replace(/Material code\s+C11\b/gi, "11GA.")
-    .replace(/\bchannel\b/gi, "Chn'l")
-    .replace(/\s+/g, " ")
-    .trim();
-}");
+    const escapedPartNumber = partNumber.replace(/[|\\{}()[\]^$+*?.]/g, "\\$&");
     description = description
-      .replace(new RegExp("\\s+\\"?" + escapedPartNumber + "\\"?$", "i"), "")
+      .replace(new RegExp("\\s+\"?" + escapedPartNumber + "\"?$", "i"), "")
       .trim();
   }
 
