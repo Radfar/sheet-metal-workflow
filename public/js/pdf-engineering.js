@@ -120,6 +120,73 @@ function detectBomRows(lines, page) {
   return rows;
 }
 
+function detectHardwareItems(lines, pageNumber, isTemplate = false) {
+  if (isTemplate) return [];
+
+  const items = [];
+  const consumedLines = new Set();
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index];
+    const text = clean(line.text);
+    if (!/\\b(?:RHMS|RHCS|FHMS|FHCS|SHCS|BHCS|machine\\s+screws?|tek\\s+screws?|self[- ]tapping\\s+screws?|screws?|bolts?|nuts?|washers?)\\b/i.test(text)) {
+      continue;
+    }
+
+    // Join a nearby continuation such as "C/W HEX NYLOK NUT" to the
+    // fastener callout above it. Keep the original line text for traceability.
+    const continuation = lines[index + 1];
+    const continuationText = continuation && Math.abs(Number(line.y) - Number(continuation.y)) <= 24
+      ? clean(continuation.text)
+      : "";
+    const hasIncludedComponent = /\\b(?:C\\s*\\/\\s*W|COMPLETE\\s+WITH|WITH)\\b/i.test(continuationText);
+    const callout = clean(text + (hasIncludedComponent ? " " + continuationText : ""));
+    if (hasIncludedComponent) consumedLines.add(index + 1);
+
+    const quantityMatch = callout.match(/\\(\\s*(\\d+(?:\\.\\d+)?)\\s*(SETS?|PCS?|PIECES?|EA(?:CH)?)\\s*\\)/i)
+      || callout.match(/\\bQTY\\s*[:=]?\\s*(\\d+(?:\\.\\d+)?)\\s*(SETS?|PCS?|PIECES?|EA(?:CH)?)?\\b/i);
+    const threadMatch = callout.match(/\\b(\\d{1,2}\\s*[-–]\\s*\\d{1,3})\\b/);
+    const lengthMatch = callout.match(/\\b(\\d+(?:\\s+\\d+\\/\\d+|\\/\\d+)?)\\s*(?:INCH(?:ES)?|IN\\.?|")/i);
+    const includedComponents = [];
+    if (/\\bHEX\\s+NYLOK\\s+NUT\\b/i.test(callout)) includedComponents.push("Hex Nylok Nut");
+    else if (/\\bNYLOK\\s+NUT\\b/i.test(callout)) includedComponents.push("Nylok Nut");
+    else if (/\\bHEX\\s+NUT\\b/i.test(callout)) includedComponents.push("Hex Nut");
+    else if (/\\bNUT\\b/i.test(callout) && /\\b(?:C\\s*\\/\\s*W|COMPLETE\\s+WITH|WITH)\\b/i.test(callout)) includedComponents.push("Nut (type not specified)");
+
+    let fastenerType = "Fastener";
+    if (/\\bRHMS\\b/i.test(callout)) fastenerType = "Round Head Machine Screw (RHMS)";
+    else if (/\\bRHCS\\b/i.test(callout)) fastenerType = "Round Head Cap Screw (RHCS)";
+    else if (/\\bFHMS\\b/i.test(callout)) fastenerType = "Flat Head Machine Screw (FHMS)";
+    else if (/\\bSHCS\\b/i.test(callout)) fastenerType = "Socket Head Cap Screw (SHCS)";
+    else if (/\\bTEK\\s+SCREWS?\\b/i.test(callout)) fastenerType = "Tek Screw";
+    else if (/\\bMACHINE\\s+SCREWS?\\b/i.test(callout)) fastenerType = "Machine Screw";
+    else if (/\\bBOLTS?\\b/i.test(callout)) fastenerType = "Bolt";
+    else if (/\\bWASHERS?\\b/i.test(callout)) fastenerType = "Washer";
+    else if (/\\bNUTS?\\b/i.test(callout)) fastenerType = "Nut";
+
+    const normalized = {
+      category: "hardware",
+      fastenerType,
+      description: callout,
+      quantity: quantityMatch ? Number(quantityMatch[1]) : null,
+      unit: quantityMatch?.[2] ? quantityMatch[2].toLowerCase().replace(/s$/, "") : null,
+      thread: threadMatch ? threadMatch[1].replace(/\\s+/g, "") : null,
+      length: lengthMatch ? clean(lengthMatch[1]) + " inch" : null,
+      includedComponents,
+      originalCallout: callout,
+      source: "PDF hardware callout",
+      page: pageNumber,
+      confidence: quantityMatch && (threadMatch || lengthMatch) ? 0.94 : 0.78,
+      status: "candidate",
+      requiresReview: true
+    };
+
+    items.push(normalized);
+  }
+
+  return items;
+}
+
 function detectPageData(pageNumber, lines, items) {
   const text = lines.map(line => line.text).join("\n");
   const fields = [];
