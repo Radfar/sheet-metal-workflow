@@ -260,6 +260,29 @@ function quoteShopPartId(value) {
 // the component identity. Do not derive or add manufacturing information.
 function buildShopStandardExportDescription(component) {
   const existingDescription = String(component.description ?? "").trim();
+  const segments = existingDescription
+    .split(/\s+—\s+/)
+    .map(segment => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length > 1) {
+    const componentIdentity = segments.shift();
+    segments.push(componentIdentity);
+  }
+
+  let description = segments.join(" ")
+    .replace(/Material code\s+C16\b/gi, "16GA.")
+    .replace(/Material code\s+C11\b/gi, "11GA.")
+    .replace(/\bchannel\b/gi, "Chn'l")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // The SolidWorks part number is exported separately as a quoted, bold suffix.
+  // Remove it from the description first if it is already present at the end.
+  const partNumber = String(component.partNumber ?? "").trim().replace(/^"+|"+$/g, "");
+  if (partNumber) {
+    const escapedPartNumber = partNumber.replace(/[.*+?^\${}()|[\]\\]/g, "\\function buildShopStandardExportDescription(component) {
+  const existingDescription = String(component.description ?? "").trim();
   if (!existingDescription) return "";
 
   const segments = existingDescription
@@ -278,6 +301,13 @@ function buildShopStandardExportDescription(component) {
     .replace(/\bchannel\b/gi, "Chn'l")
     .replace(/\s+/g, " ")
     .trim();
+}");
+    description = description
+      .replace(new RegExp("\\s+\\"?" + escapedPartNumber + "\\"?$", "i"), "")
+      .trim();
+  }
+
+  return description;
 }
 
 const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["cuttingListIdentity","Approved common DXF identity / filename","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["cuttingListFinish","Laser order finish (optional)","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
@@ -1132,6 +1162,7 @@ async function exportBomWorkbook(descriptionMode) {
       fixtureDescription:$("fixtureDescription").value,
       finish:[$("finish").value, $("finishDescription").value].filter(Boolean).join(" = "),
       bomFilenameDescription:$("bomFilenameDescription").value,
+      shopFormat:isShop,
       components:components.map(component => ({
         itemNo:component.itemNo,
         partNumber:component.partNumber,
