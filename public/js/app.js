@@ -228,8 +228,9 @@ function buildShopStandardExportDescription(component) {
   if (type === "Plate") {
     const width = value("plateLength") || value("flatPatternWidth") || String(matchedDxf?.flatWidth || "").trim();
     const height = value("plateWidth") || value("flatPatternHeight") || String(matchedDxf?.flatHeight || "").trim();
-    const dimensions = [width, height].filter(Boolean).join('" x ');
-    base = [dimensions ? dimensions + (dimensions.endsWith('"') ? "" : '"') : "", gauge, "Plt.",
+    const inch = dimension => dimension && !dimension.endsWith('"') ? dimension + '"' : dimension;
+    const dimensions = [inch(width), inch(height)].filter(Boolean).join(" x ");
+    base = [dimensions, gauge, "Plt.",
       process ? "(" + process + ")" : "", quotedId].filter(Boolean).join(" ");
   } else if (type === "Angle" || type === "Channel") {
     const profile = type === "Channel" ? "Chn'l" : "Angle";
