@@ -490,6 +490,8 @@ function saveCurrentFixture() {
     sourceFiles: clone(fixtureData[currentFixtureTag]?.sourceFiles || {}),
     drawingText: drawingText || fixtureData[currentFixtureTag]?.drawingText || "",
     bomGenerated: Boolean(fixtureData[currentFixtureTag]?.bomGenerated),
+    shopBomGenerated: Boolean(fixtureData[currentFixtureTag]?.shopBomGenerated),
+    dxfBomGenerated: Boolean(fixtureData[currentFixtureTag]?.dxfBomGenerated),
     generatedAt: fixtureData[currentFixtureTag]?.generatedAt || "",
     includeInLaser: fixtureData[currentFixtureTag]?.includeInLaser !== false
   };
