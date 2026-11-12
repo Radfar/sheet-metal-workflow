@@ -333,7 +333,7 @@ function buildShopStandardExportDescription(component) {
       const gauge = gaugeMatch[0];
       const remaining = description
         .replace(/\bFlat pattern\b/i, "")
-        .replace(new RegExp("\\b" + gauge.replace(".", "\\\\.") + "(?=\\s|$)", "i"), "")
+        .replace(gauge, "")
         .replace(/\bPlate\b/i, "")
         .replace(/\s+/g, " ")
         .trim();
