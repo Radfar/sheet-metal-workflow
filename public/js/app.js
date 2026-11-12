@@ -557,8 +557,7 @@ $("addScheduleRowBtn").addEventListener("click", () => {
     no:schedule.length + 1, tag:"", mounting:"", height:"", profile:"",
     width:"", length:"", finish:"", qty:""
   });
-  wireEngineeringExtractionJsonControls();
-renderScheduleEditor();
+  renderScheduleEditor();
   renderFixtureOptions();
   $("scheduleStatus").textContent = "New schedule row added. Enter its values, then select and load it.";
   $("scheduleStatus").className = "ok";
@@ -685,6 +684,8 @@ function applyImportedEngineeringExtraction(data) {
   }
   engineeringData = data;
   drawingText = String(data.text || "");
+  renderEngineeringExtraction(data);
+  saveCurrentFixture();
   const summary = typeof engineeringSummary === "function" ? engineeringSummary(data) : [];
   const fields = $("engineeringExtractionFields");
   if (fields) {
@@ -754,7 +755,7 @@ function renderEngineeringExtraction(data) {
 
   if (!data) {
     const details = $("engineeringExtractionDetails");
-    if (details) details.hidden = true;
+    if (details) details.hidden = false;
     summaryEl.textContent = "No engineering PDF data extracted yet.";
     fieldsEl.innerHTML = "";
     jsonEl.value = "";
@@ -1356,6 +1357,7 @@ if (logoutButton) {
   });
 }
 
+wireEngineeringExtractionJsonControls();
 renderScheduleEditor();
 renderFixtureOptions();
 $("fixtureSelect").value = schedule[0]?.tag || "";
