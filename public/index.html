@@ -100,6 +100,20 @@
       <summary>Extracted drawing PDF text (reference only)</summary>
       <textarea id="drawingTextPreview" rows="8" readonly></textarea>
     </details>
+    <details id="engineeringExtractionDetails" hidden>
+      <summary>Structured engineering data extracted from PDF — verify before use</summary>
+      <p id="engineeringExtractionSummary" class="status-text">No engineering PDF data extracted yet.</p>
+      <div class="table-wrap">
+        <table class="summary-table">
+          <thead><tr><th>Field</th><th>Candidate value</th><th>Page</th><th>Confidence</th><th>Status</th></tr></thead>
+          <tbody id="engineeringExtractionFields"></tbody>
+        </table>
+      </div>
+      <details>
+        <summary>Structured extraction JSON</summary>
+        <textarea id="engineeringExtractionJson" rows="16" readonly></textarea>
+      </details>
+    </details>
     <div class="actions">
       <button id="buildComponentTreeBtn" type="button" disabled>Build BOM Component Tree View</button>
       <span id="folderImportReview" class="status-text">After source files are read and matched, build the component tree for review.</span>
