@@ -264,9 +264,9 @@ Purchased hardware does not need a DXF file and should not receive sheet-metal p
 
 ## 8. Approved T01A project-specific shop naming overrides
 
-These are approved output formats for the current T01A project. They are special-case overrides and do not replace the general historical channel/angle templates.
+These are approved shop-format rules. The trough-section override applies to every fixture unit containing a trough, not only T01A. It takes precedence over the generic channel template for identified trough components.
 
-### T01A trough sections
+### Trough sections (all fixture units)
 
 | Part number | Shop description |
 |---|---|
@@ -347,7 +347,7 @@ The process marker and quoted part number are bold in Excel.
 
 - Other angle rows: remove Flat pattern; put Angle immediately after gauge; avoid duplicate Angle.
 - Generic channel rows: remove Flat pattern; use Chn'l only where the applicable channel template requires it.
-- The T01A trough-section override takes precedence over generic channel formatting for T01A-A/B/C.
+- Apply the trough-section override to matching trough components in every fixture (for example, T01A-A/B/C and corresponding T01B or other fixture part IDs). Do not apply it to ordinary channels that are not identified as troughs.
 
 ## 9. Excel BOM structure and quantities
 
