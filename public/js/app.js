@@ -310,7 +310,13 @@ function buildShopStandardExportDescription(component) {
     const isEndcap = /END[\s_-]*CAP|ENDCAP/i.test(identitySource);
     const isGusset = /GUSSET|\bGUS\b/i.test(identitySource);
     const isShortAngle = /SHORT[\s_-]*ANG/i.test(partNumber) || /SHORT[\s_-]*ANGLE/i.test(identity);
-    const isTroughSection = /^T01A-[ABC]$/i.test(partNumber) || /TROUGH\s+SECTION/i.test(identitySource + " " + description);
+    // Apply the trough-section shop format across fixture tags, not only T01A.
+    // Require a fixture-style part ID and a source channel/trough descriptor
+    // so ordinary channel components keep their existing generic format.
+    const troughSource = identitySource + " " + description;
+    const isFixtureTroughPart = /^T\\d+[A-Z]?-[A-Z]$/i.test(partNumber) &&
+      /\\bTROUGH\\b|\\bCHANNEL\\b|\\bCHN'L\\b/i.test(troughSource);
+    const isTroughSection = isFixtureTroughPart || /TROUGH\\s+SECTION/i.test(troughSource);
 
     if (isEndcap || isGusset || isShortAngle || isTroughSection) {
       let name = identity;
