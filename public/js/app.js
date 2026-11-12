@@ -317,38 +317,38 @@ function buildShopStandardExportDescription(component) {
     }
   } else {
     const sourceIdentity = description + " " + partNumber;
-    const isEndcap = /END[\\s_-]*CAP|ENDCAP/i.test(sourceIdentity);
-    const isGusset = /GUSSET|\\bGUS\\b/i.test(sourceIdentity);
-    const isAngle = /\\bAngle\\b|\\bANG\\b|[-_]ANG(?:[-_\\d]|$)/i.test(sourceIdentity);
-    const isChannel = /\\bChn'l\\b/i.test(description);
-    const gaugeMatch = description.match(/\\b(?:16|11)GA\\./i);
+    const isEndcap = /END[\s_-]*CAP|ENDCAP/i.test(sourceIdentity);
+    const isGusset = /GUSSET|\bGUS\b/i.test(sourceIdentity);
+    const isAngle = /\bAngle\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(sourceIdentity);
+    const isChannel = /\bChn'l\b/i.test(description);
+    const gaugeMatch = description.match(/\b(?:16|11)GA\./i);
 
     if (isEndcap) {
-      description = description.replace(/\\bFlat pattern\\b/gi, "")
-        .replace(/\\bPlate\\b/gi, "")
-        .replace(/\\s+/g, " ").trim();
+      description = description.replace(/\bFlat pattern\b/gi, "")
+        .replace(/\bPlate\b/gi, "")
+        .replace(/\s+/g, " ").trim();
       if (gaugeMatch) {
         const gauge = gaugeMatch[0];
         description = description.replace(gauge, gauge + " Plt.");
       }
     } else if (isGusset) {
-      description = description.replace(/\\bFlat pattern\\b/gi, "")
-        .replace(/\\s+/g, " ").trim();
+      description = description.replace(/\bFlat pattern\b/gi, "")
+        .replace(/\s+/g, " ").trim();
       if (gaugeMatch) {
         const gauge = gaugeMatch[0];
         description = description.replace(gauge, gauge + " Chn'l");
       }
     } else if (isAngle) {
-      description = description.replace(/\\bFlat pattern\\b/gi, "")
-        .replace(/\\bAngle\\b/gi, "").replace(/\\bANG\\b/gi, "")
-        .replace(/\\s+/g, " ").trim();
-      const angleGauge = description.match(/\\b\\d+GA\\./i);
+      description = description.replace(/\bFlat pattern\b/gi, "")
+        .replace(/\bAngle\b/gi, "").replace(/\bANG\b/gi, "")
+        .replace(/\s+/g, " ").trim();
+      const angleGauge = description.match(/\b\d+GA\./i);
       if (angleGauge) {
         const gauge = angleGauge[0];
         description = description.replace(gauge, gauge + " Angle");
       }
     } else if (isChannel) {
-      description = description.replace(/\\bFlat pattern\\b/gi, "");
+      description = description.replace(/\bFlat pattern\b/gi, "");
     }
   }
   return description.replace(/\s+/g, " ").trim();
