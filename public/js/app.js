@@ -124,73 +124,89 @@ function matchDxfIndex(partNumber, files, fixtureTag) {
 
   return bestScore >= 70 ? bestIndex : "";
 }
-function makeDraftDescription() {
-  // A DXF filename alone does not contain the verified shop-description data.
-  // Do not create a manufacturing description from a component label or flat size.
-  return "";
+function inferredComponentType(component) {
+  const source = [component.partNumber, component.description].filter(Boolean).join(" ").toUpperCase();
+  if (/SHORT[\\s_-]*ANG/.test(source)) return "Angle";
+  if (/\\bANG(?:LE)?\\b|[-_]ANG[-_\\d]/.test(source)) return "Angle";
+  if (/CHN|CHANNEL|TROUGH/.test(source)) return "Channel";
+  if (/END[\\s_-]*CAP|ENDCAP|SPLICE[\\s_-]*PLT|\\bPLT\\b|PLATE/.test(source)) return "Plate";
+  if (/GUSSET|\\bGUS\\b/.test(source)) return "Gusset";
+  return component.componentType || "";
 }
 
-function buildShopBomDescription(component) {
+function inferredComponentName(component) {
+  const source = [component.partNumber, component.description].filter(Boolean).join(" ").toUpperCase();
+  if (/SHORT[\\s_-]*ANG/.test(source)) return "Short angle";
+  if (/END[\\s_-]*CAP|ENDCAP/.test(source)) return "End cap";
+  if (/SPLICE[\\s_-]*PLT|SPLICE[\\s_-]*PLATE/.test(source)) return "Splice plate";
+  if (/GUSSET|\\bGUS\\b/.test(source)) return "Return gusset";
+  if (/CHN|CHANNEL|TROUGH/.test(source)) return "Channel";
+  if (/[-_]ANG(?:[-_\\d]|$)|\\bANGLE\\b/.test(source)) return "Angle";
+  if (/PLT|PLATE/.test(source)) return "Plate";
+  return "Component";
+}
+
+function appendDxfDetails(description, component, matchedDxf) {
+  const width = String(component.flatPatternWidth || matchedDxf?.flatWidth || "").trim();
+  const height = String(component.flatPatternHeight || matchedDxf?.flatHeight || "").trim();
+  const materialCode = String(component.materialCode || matchedDxf?.materialCode || "").trim();
+  const details = [];
+  if (width && height) details.push("Flat pattern " + width + " × " + height + " in");
+  if (materialCode) details.push("Material code " + materialCode);
+  return details.length ? description + " — " + details.join(" — ") : description;
+}
+
+function buildShopBomDescription(component, matchedDxf = null) {
   const value = key => String(component[key] ?? "").trim();
-  const type = value("componentType");
+  const type = value("componentType") || inferredComponentType(component);
   const gauge = value("gauge");
   const process = value("manufacturingProcess");
   const partId = value("partIdentification") || value("partNumber");
   const partToken = partId ? '"' + partId + '"' : "";
-  const required = [];
-  let description = "";
+  let base = "";
 
   if (type === "Angle" || type === "Channel") {
-    if (!value("crossSectionDimensions")) required.push("Cross-section dimensions");
-    if (!gauge) required.push("Thickness / gauge");
-    if (!value("overallLength")) required.push("Overall finished length");
-    if (!required.length) {
-      description = [
-        value("crossSectionDimensions"),
-        gauge,
-        type === "Channel" ? "Chn'l" : "Angle",
-        "x " + value("overallLength"),
-        process ? "(" + process + ")" : "",
-        partToken
-      ].filter(Boolean).join(" ");
+    const dimensions = value("crossSectionDimensions");
+    const profile = type === "Channel" ? "Chn'l" : "Angle";
+    if (dimensions || gauge || value("overallLength")) {
+      base = [dimensions, gauge, profile,
+        value("overallLength") ? "x " + value("overallLength") : "",
+        process ? "(" + process + ")" : "", partToken].filter(Boolean).join(" ");
     }
   } else if (type === "Plate") {
-    if (!value("plateLength")) required.push("Plate length");
-    if (!value("plateWidth")) required.push("Plate width");
-    if (!gauge) required.push("Thickness / gauge");
-    if (!required.length) description = [
-      value("plateLength"), "x " + value("plateWidth"), gauge, "Plt.",
-      process ? "(" + process + ")" : "", partToken
-    ].filter(Boolean).join(" ");
-  } else if (type === "Gusset") {
-    if (!value("geometryDimensions")) required.push("Geometry dimensions");
-    if (!gauge) required.push("Thickness / gauge");
-    if (!required.length) description = [
-      value("geometryDimensions"), gauge, value("profileType"),
-      value("additionalDimensions") ? "x " + value("additionalDimensions") : "",
-      "Return Gusset", process ? "(" + process + ")" : "", partToken
-    ].filter(Boolean).join(" ");
-  } else if (type === "Purchased hardware") {
-    if (!value("hardwareSize")) required.push("Hardware size");
-    if (!value("hardwareType")) required.push("Hardware type / specification");
-    if (!required.length) description = [
-      value("hardwareSize"), value("hardwareType"),
-      value("hardwareLength") ? "x " + value("hardwareLength") : ""
-    ].filter(Boolean).join(" ");
-  } else if (type) {
-    if (!value("geometryDimensions") && !value("overallLength")) {
-      required.push("Geometry dimensions or overall finished length");
+    const dimensions = [value("plateLength"), value("plateWidth")].filter(Boolean).join(" x ");
+    if (dimensions || gauge) {
+      base = [dimensions, gauge, "Plt.", process ? "(" + process + ")" : "", partToken]
+        .filter(Boolean).join(" ");
     }
-    if (!required.length) description = [
-      value("geometryDimensions"), gauge, type,
-      value("overallLength") ? "x " + value("overallLength") : "",
-      process ? "(" + process + ")" : "", partToken
-    ].filter(Boolean).join(" ");
-  } else {
-    required.push("Component type");
+  } else if (type === "Gusset") {
+    if (value("geometryDimensions") || gauge || value("additionalDimensions")) {
+      base = [value("geometryDimensions"), gauge, value("profileType"),
+        value("additionalDimensions") ? "x " + value("additionalDimensions") : "",
+        "Return Gusset", process ? "(" + process + ")" : "", partToken]
+        .filter(Boolean).join(" ");
+    }
+  } else if (type === "Purchased hardware") {
+    base = [value("hardwareSize"), value("hardwareType"),
+      value("hardwareLength") ? "x " + value("hardwareLength") : ""].filter(Boolean).join(" ");
+  } else if (type) {
+    const dimensions = value("geometryDimensions");
+    if (dimensions || gauge || value("overallLength")) {
+      base = [dimensions, gauge, type,
+        value("overallLength") ? "x " + value("overallLength") : "",
+        process ? "(" + process + ")" : "", partToken].filter(Boolean).join(" ");
+    }
   }
 
-  return { description, missing: required };
+  if (!base) {
+    const partNumber = value("partNumber") || value("partIdentification");
+    base = inferredComponentName(component) + (partNumber ? " " + partNumber : "");
+  }
+  return { description: appendDxfDetails(base, component, matchedDxf), missing: [] };
+}
+
+function makeDraftDescription(component, matchedDxf) {
+  return buildShopBomDescription(component, matchedDxf).description;
 }
 
 
@@ -251,34 +267,36 @@ function renderManufacturingFields(component, index) {
 function rebuildComponents() {
   components = bomLines.map(line => {
     const dxfIndex = matchDxfIndex(line.partNumber, dxfFiles, currentFixtureTag);
+    const matchedDxf = dxfIndex === "" ? null : dxfFiles[Number(dxfIndex)];
+    const component = {
+      ...clone(line),
+      materialCode: line.materialCode || matchedDxf?.materialCode || "",
+      flatPatternWidth: line.flatPatternWidth || matchedDxf?.flatWidth || "",
+      flatPatternHeight: line.flatPatternHeight || matchedDxf?.flatHeight || ""
+    };
     let description = String(line.description || "").trim();
     let descriptionDraft = Boolean(line.descriptionDraft);
+    const origin = line.descriptionOrigin || (description && description === String(line.partNumber || "").trim() ? "solidworks" : "");
 
-    // Auto-generated descriptions are derived from the DXF match. If the
-    // match changes, refresh an existing auto-draft so a previous incorrect
-    // association cannot survive into the exported BOM. Manual descriptions
-    // (descriptionDraft === false) are preserved.
-    if (dxfIndex !== "" && (!description || descriptionDraft)) {
-      description = makeDraftDescription(line.partNumber, dxfFiles[Number(dxfIndex)]);
+    // SolidWorks descriptions are source labels, not the final manufacturing
+    // description. Replace source labels and prior generated drafts with the
+    // enriched shop format. Preserve descriptions explicitly edited by users.
+    if (!line.manual && origin !== "manual" && (origin === "solidworks" || origin === "generated" || descriptionDraft || !description)) {
+      description = makeDraftDescription(component, matchedDxf);
       descriptionDraft = Boolean(description);
-      if (descriptionDraft) {
-        line.description = description;
-        line.descriptionDraft = true;
-      }
+      component.descriptionOrigin = "generated";
+      line.description = description;
+      line.descriptionDraft = descriptionDraft;
+      line.descriptionOrigin = "generated";
     }
-
-    const matchedDxf = dxfIndex === "" ? null : dxfFiles[Number(dxfIndex)];
     return {
-      ...clone(line),
+      ...component,
       itemNo: line.itemNo,
       partNumber: line.partNumber,
       quantityPerAssembly: line.quantityPerAssembly,
       description,
       descriptionDraft,
       dxfIndex,
-      materialCode: line.materialCode || matchedDxf?.materialCode || "",
-      flatPatternWidth: line.flatPatternWidth || matchedDxf?.flatWidth || "",
-      flatPatternHeight: line.flatPatternHeight || matchedDxf?.flatHeight || "",
       manual: Boolean(line.manual)
     };
   });
@@ -830,7 +848,7 @@ async function importFixtureFolder() {
     try { pdfResult = await extractDrawingPdfText(pdfCandidates[0].file); }
     catch (error) { pdfWarning = " PDF text extraction was unavailable (" + error.message + "); the drawing remains identified as a source reference."; }
     loadFixture(tag);
-    bomLines = bomResult.components.map(line => ({ ...line, manual: false }));
+    bomLines = bomResult.components.map(line => ({ ...line, descriptionOrigin: "solidworks", descriptionDraft: true, manual: false }));
     dxfFiles = dxfResult.components.map((component, index) => ({ ...component, sha256: dxfHashes[index] || "" }));
     drawingText = pdfResult.text;
     $("dxfInput").value = dxfNames.join("\n");
@@ -913,7 +931,7 @@ $("componentRows").addEventListener("change", event => {
     !String(components[index].description || "").trim() ||
     components[index].descriptionDraft
   )) {
-    const draft = makeDraftDescription(components[index].partNumber, dxfFiles[components[index].dxfIndex]);
+    const draft = makeDraftDescription(components[index], dxfFiles[components[index].dxfIndex]);
     if (draft) {
       components[index].description = draft;
       components[index].descriptionDraft = true;
@@ -935,13 +953,17 @@ $("componentRows").addEventListener("input", event => {
   components[index][input.dataset.componentField] = input.value;
   if (input.dataset.componentField === "description") {
     components[index].descriptionDraft = false;
+    components[index].descriptionOrigin = "manual";
   }
   const line = bomLines.find(entry =>
     entry.itemNo === components[index].itemNo && entry.partNumber === components[index].partNumber
   );
   if (line) {
     line[input.dataset.componentField] = input.value;
-    if (input.dataset.componentField === "description") line.descriptionDraft = false;
+    if (input.dataset.componentField === "description") {
+      line.descriptionDraft = false;
+      line.descriptionOrigin = "manual";
+    }
   }
   saveCurrentFixture();
 });
@@ -951,21 +973,22 @@ $("componentRows").addEventListener("click", event => {
   if (buildButton) {
     const index = Number(buildButton.dataset.generateDescription);
     const component = components[index];
-    const result = buildShopBomDescription(component);
+    const matchedDxf = component.dxfIndex === "" || component.dxfIndex == null
+      ? null : dxfFiles[Number(component.dxfIndex)];
+    const result = buildShopBomDescription(component, matchedDxf);
     const description = result.description;
-    if (result.missing.length || !description.trim()) {
-      $("parseStatus").textContent = "Complete these fields before building the shop-format description: " +
-        result.missing.join(", ") + ".";
-      $("parseStatus").className = "error";
-      return;
-    }
     component.description = description;
-    component.descriptionDraft = false;
+    component.descriptionDraft = true;
+    component.descriptionOrigin = "generated";
     const line = bomLines.find(entry => entry.itemNo === component.itemNo && entry.partNumber === component.partNumber);
-    if (line) { line.description = description; line.descriptionDraft = false; }
+    if (line) {
+      line.description = description;
+      line.descriptionDraft = true;
+      line.descriptionOrigin = "generated";
+    }
     saveCurrentFixture();
     renderComponents();
-    $("parseStatus").textContent = "Description built for " + (component.partNumber || "component") + ". Review it before export.";
+    $("parseStatus").textContent = "Shop-format description refreshed for " + (component.partNumber || "component") + ". Review it before export.";
     $("parseStatus").className = "ok";
     return;
   }
