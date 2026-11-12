@@ -9,6 +9,8 @@ const fixtureData = {};
 let templateAssets = { stellarLogo: "", radioButton: "" };
 let selectedFixtureFolderEntries = null;
 let selectedFixtureFolderName = "";
+let selectedProjectRootName = "";
+let importedProjectTags = [];
 
 
 function makeBomFilename() {
@@ -875,21 +877,14 @@ async function extractDrawingPdfText(pdfFile) {
 async function readSelectedDirectory(handle) {
   const rootName = handle.name;
   const entries = [];
-  for await (const [name, child] of handle.entries()) {
-    if (child.kind === "file") {
-      entries.push({ file: await child.getFile(), path: rootName + "/" + name });
-      continue;
-    }
-    if (child.kind === "directory" && name.toUpperCase() === "DXF") {
-      entries.push({ file: null, path: rootName + "/" + name + "/" });
-      if (name !== "DXF") continue;
-      for await (const [dxfName, dxfHandle] of child.entries()) {
-        if (dxfHandle.kind === "file") {
-          entries.push({ file: await dxfHandle.getFile(), path: rootName + "/DXF/" + dxfName });
-        }
-      }
+  async function walk(directory, prefix) {
+    for await (const [name, child] of directory.entries()) {
+      const path = prefix + "/" + name;
+      if (child.kind === "file") entries.push({ file: await child.getFile(), path });
+      else if (child.kind === "directory") await walk(child, path);
     }
   }
+  await walk(handle, rootName);
   return entries;
 }
 
@@ -959,9 +954,9 @@ $("fixtureFolderInput").addEventListener("change", async () => {
   }
 });
 
-async function importFixtureFolder() {
-  const selected = selectedFixtureFolderEntries || Array.from($("fixtureFolderInput").files || []);
-  const tag = $("fixtureSelect").value;
+async function importFixtureFolder(folderTag = $("fixtureSelect").value, providedEntries = null) {
+  const selected = providedEntries || selectedFixtureFolderEntries || Array.from($("fixtureFolderInput").files || []);
+  const tag = folderTag;
   const status = $("fixtureFolderStatus");
   if (!selected.length) throw new Error("Select the fixture folder first.");
   if (!tag) throw new Error("Select a fixture tag from the project schedule.");
@@ -1027,6 +1022,8 @@ async function importFixtureFolder() {
     $("dxfInput").value = dxfNames.join("\n");
     rebuildComponents();
     fixtureData[tag].bomGenerated = false;
+    fixtureData[tag].shopBomGenerated = false;
+    fixtureData[tag].dxfBomGenerated = false;
     fixtureData[tag].generatedAt = "";
     fixtureData[tag].includeInLaser = true;
     fixtureData[tag].sourceFiles = {
