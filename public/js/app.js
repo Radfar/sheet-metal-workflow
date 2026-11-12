@@ -664,12 +664,16 @@ function renderEngineeringExtraction(data) {
   if (!summaryEl || !jsonEl || !fieldsEl) return;
 
   if (!data) {
+    const details = $("engineeringExtractionDetails");
+    if (details) details.hidden = true;
     summaryEl.textContent = "No engineering PDF data extracted yet.";
     fieldsEl.innerHTML = "";
     jsonEl.value = "";
     return;
   }
 
+  const details = $("engineeringExtractionDetails");
+  if (details) details.hidden = false;
   const first = key => data.fields?.[key]?.[0];
   const rows = [
     ["Fixture tag", first("fixtureTag")],
