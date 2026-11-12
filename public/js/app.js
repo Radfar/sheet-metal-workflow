@@ -320,7 +320,9 @@ function buildShopStandardExportDescription(component) {
         name = name.replace(/\s+REMOVABLE[-_ ]GUSSET\s*$/i, "")
           .replace(/\bReturn\s+gusset\b/gi, "Gusset").replace(/\s+/g, " ").trim();
       } else if (isShortAngle) {
-        name = name.replace(/\bshort\s+angle\b/gi, "Short Angle").replace(/\s+/g, " ").trim();
+        // The shop name is only "Short Angle"; the SolidWorks part number is
+        // appended separately in bold by the Excel exporter.
+        name = "Short Angle";
       }
 
       description = description.replace(/\bFlat pattern\b/gi, "")
@@ -333,6 +335,7 @@ function buildShopStandardExportDescription(component) {
       const sourceIdentity = description + " " + identity + " " + partNumber;
       const isAngle = /\bAngle\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(sourceIdentity);
       const isChannel = /\bChn'l\b/i.test(sourceIdentity);
+      const isT01AAngle = /^T01A-ANG-[123]$/i.test(partNumber);
       if (isAngle) {
         description = description.replace(/\bFlat pattern\b/gi, "")
           .replace(/\bAngle\b/gi, "").replace(/\bANG\b(?![-_]\d)/gi, "")
@@ -342,8 +345,12 @@ function buildShopStandardExportDescription(component) {
           const gauge = gaugeMatch[0];
           description = description.replace(gauge, gauge + " Angle");
         }
-        const angleIdentity = identity.replace(/^\s*Angle\s*/i, "").trim();
-        if (angleIdentity) description = [description, angleIdentity].filter(Boolean).join(" ");
+        if (isT01AAngle) {
+          description = description + " (Laser/SM)";
+        } else {
+          const angleIdentity = identity.replace(/^\s*Angle\s*/i, "").trim();
+          if (angleIdentity) description = [description, angleIdentity].filter(Boolean).join(" ");
+        }
       } else if (isChannel) {
         description = description.replace(/\bFlat pattern\b/gi, "");
         if (identity) description = [description, identity].filter(Boolean).join(" ");
