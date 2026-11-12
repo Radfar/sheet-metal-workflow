@@ -557,7 +557,8 @@ $("addScheduleRowBtn").addEventListener("click", () => {
     no:schedule.length + 1, tag:"", mounting:"", height:"", profile:"",
     width:"", length:"", finish:"", qty:""
   });
-  renderScheduleEditor();
+  wireEngineeringExtractionJsonControls();
+renderScheduleEditor();
   renderFixtureOptions();
   $("scheduleStatus").textContent = "New schedule row added. Enter its values, then select and load it.";
   $("scheduleStatus").className = "ok";
@@ -656,6 +657,93 @@ async function readSelectedDirectory(handle) {
     }
   }
   return entries;
+}
+
+function saveEngineeringExtractionJson(data) {
+  const fixture = currentFixtureTag || data?.fields?.fixtureTag?.[0]?.value || "fixture";
+  const safe = String(fixture).replace(/[^A-Za-z0-9_-]+/g, "_");
+  const payload = JSON.stringify(data, null, 2);
+  const blob = new Blob([payload], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = safe + "-engineering-extraction.json";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  const status = $("engineeringJsonStatus");
+  if (status) {
+    status.textContent = "Saved " + anchor.download + ". You can commit this JSON to the repository and import it later.";
+    status.className = "ok";
+  }
+}
+
+function applyImportedEngineeringExtraction(data) {
+  if (!data || typeof data !== "object" || !Array.isArray(data.pages)) {
+    throw new Error("This file is not a valid engineering extraction JSON.");
+  }
+  engineeringData = data;
+  drawingText = String(data.text || "");
+  const summary = typeof engineeringSummary === "function" ? engineeringSummary(data) : [];
+  const fields = $("engineeringExtractionFields");
+  if (fields) {
+    fields.innerHTML = summary.map(([field, value]) => {
+      const keyMap = {
+        "Fixture tag":"fixtureTag","Project / store":"projectOrStore","Drawing number":"drawingNumber",
+        "Revision":"revision","Sheet":"sheetNumber","Material":"material","Thickness / gauge":"thickness",
+        "Finish":"finish","Drawing quantity":"drawingQuantity"
+      };
+      const key = keyMap[field];
+      const item = key ? (data.fields?.[key]?.[0]) : null;
+      return "<tr><td>" + esc(field) + "</td><td>" + esc(value || "Not detected") +
+        "</td><td>" + esc(item?.page || "—") + "</td><td>" +
+        esc(item ? Math.round(item.confidence * 100) + "%" : "—") + "</td><td>" +
+        esc(item?.status || "—") + "</td></tr>";
+    }).join("");
+  }
+  const jsonEl = $("engineeringExtractionJson");
+  if (jsonEl) jsonEl.value = JSON.stringify(data, null, 2);
+  const textEl = $("drawingTextPreview");
+  if (textEl) textEl.value = drawingText;
+  $("engineeringExtractionDetails")?.removeAttribute("hidden");
+  $("drawingTextDetails")?.removeAttribute("hidden");
+  const status = $("engineeringJsonStatus");
+  if (status) {
+    status.textContent = "Imported saved engineering extraction JSON. Review the candidate values before use.";
+    status.className = "ok";
+  }
+  const saveBtn = $("saveEngineeringJsonBtn");
+  if (saveBtn) saveBtn.disabled = false;
+}
+
+function wireEngineeringExtractionJsonControls() {
+  const saveBtn = $("saveEngineeringJsonBtn");
+  const importBtn = $("importEngineeringJsonBtn");
+  const fileInput = $("importEngineeringJsonFile");
+  if (saveBtn) saveBtn.addEventListener("click", () => {
+    if (!engineeringData) return;
+    saveEngineeringExtractionJson(engineeringData);
+  });
+  if (importBtn && fileInput) {
+    importBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      try {
+        const data = JSON.parse(await file.text());
+        applyImportedEngineeringExtraction(data);
+      } catch (error) {
+        const status = $("engineeringJsonStatus");
+        if (status) {
+          status.textContent = "Import failed: " + error.message;
+          status.className = "error";
+        }
+      } finally {
+        fileInput.value = "";
+      }
+    });
+  }
 }
 
 function renderEngineeringExtraction(data) {
