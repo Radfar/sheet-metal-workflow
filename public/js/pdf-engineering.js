@@ -127,7 +127,7 @@ function detectHardwareItems(lines, pageNumber, isTemplate = false) {
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
     const text = clean(line.text);
-    if (!/\b(?:RHMS|RHCS|FHMS|FHCS|SHCS|BHCS|machine\s+screws?|tek\s+screws?|self[- ]tapping\s+screws?|screws?|bolts?|nuts?|washers?)\b/i.test(text)) {
+    if (!/\b(?:RHMS(?:x)?|RHCS|FHMS|FHCS|SHCS|BHCS|machine\s+screws?|tek\s+screws?|self[- ]tapping\s+screws?|screws?|bolts?|nuts?|washers?)\b/i.test(text)) {
       continue;
     }
 
