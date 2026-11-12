@@ -3,26 +3,30 @@
 A Node.js web application for preparing fixture BOMs from SolidWorks BOM exports and DXF filename lists.
 
 ## Current workflow
-1. Enter or confirm the project schedule and select a fixture tag.
-2. Select the fixture's folder using the browser's folder picker. The folder name must exactly match the selected uppercase fixture tag (for example, `T01A`).
-3. The fixture folder must contain:
-   ```text
-   T01A/
-   ├── T01A.pdf
-   ├── T01A.xls   (or T01A.xlsx)
-   └── DXF/
-       ├── part-01.DXF
-       ├── part-02.DXF
-       └── ...
-   ```
-4. The application reads the SolidWorks BOM workbook and extracts the DXF filenames from the `DXF` subfolder. DXF files are fingerprinted locally with SHA-256 to detect byte-identical parts across selected fixtures; file contents are never uploaded.
-5. The drawing PDF is processed locally in the browser with PDF.js. Extracted text is displayed as reference material; it is not treated as verified engineering data automatically.
-6. The application matches BOM part numbers against parsed DXF filenames. Click **Build BOM Component Tree View** to display the match results.
-7. Review the BOM, correct matches and engineering data, then click **Generate BOM Excel File**.
-8. Project Schedule Summary displays only fixtures whose BOM Excel file has been generated. A green check indicates generation; select or clear each fixture's checkbox to include or exclude it from the Laser Order Request.
-9. Generate the Laser Order Request from any selected set of generated fixture BOMs; completing the full project schedule is not required. The export button becomes available after at least one generated BOM is selected. Production quantities are calculated as BOM quantity per fixture multiplied by fixture schedule quantity.
+1. Enter or confirm the project information and fixture schedule.
+2. Select the **project root folder** once. It contains one subfolder per fixture unit, with folder names matching the fixture tags in the schedule (for example, `T01A`, `T01B`, `T01C`).
+3. Each fixture folder contains a SolidWorks BOM workbook, a drawing PDF, and a `DXF` subfolder. Source files may be arranged in folders such as `SolidWorks BOM/` and `Drawing PDF/`. An optional `Excel/` folder may hold previous exports and is excluded from source BOM discovery.
+4. The application discovers schedule-matched fixture folders and imports each separately. It reports missing or ambiguous source files by fixture tag.
+5. The Project Schedule Summary shows each schedule unit, import status, BOM item count, and the status of each Excel export.
+6. Use **Generate DXF-Based BOM Excel** or **Generate Shop-Format BOM Excel** to generate one separate workbook per successfully imported fixture. Both existing Excel formats are retained. The detailed BOM Component Tree View is not part of this project-level workflow.
+7. Select generated fixtures in the Project Schedule Summary when preparing the consolidated Laser Order Request. Quantities remain based on BOM quantity per fixture multiplied by fixture schedule quantity.
 
-The preferred folder picker uses the browser File System Access API (current Chrome or Edge on localhost/HTTPS) to read the selected folder locally. This avoids the browser's bulk-folder upload confirmation. Only the SolidWorks workbook is sent to the local application server for parsing; the PDF is processed in the browser. DXF files are fingerprinted locally with SHA-256 for exact byte-for-byte comparison, but their contents are never uploaded. Browsers without this API use the directory-input fallback, which may show a browser-managed folder upload confirmation.
+Example:
+```text
+Project Root/
+├── T01A/
+│   ├── DXF/
+│   ├── Drawing PDF/T01A.pdf
+│   ├── SolidWorks BOM/T01A.xlsx
+│   └── Excel/                 (optional previous exports)
+├── T01B/
+│   ├── DXF/
+│   ├── Drawing PDF/T01B.pdf
+│   └── SolidWorks BOM/T01B.xlsx
+└── ...
+```
+
+The preferred folder picker uses the browser File System Access API (current Chrome or Edge on localhost/HTTPS) to read the selected project folder locally. Browsers without this API use the directory-input fallback, which may show a browser-managed folder upload confirmation. Only SolidWorks BOM workbooks are sent to the local application server for parsing; PDFs are processed in the browser; DXF contents are not uploaded.
 
 ## BOM data sources
 - SolidWorks BOM is the source for item number, part number and quantity per fixture.
@@ -129,28 +133,3 @@ Current limitation: project, fixture BOMs, generated-status flags and selected l
 - If no gauge can be determined from C11/C16 and no verified gauge is entered in the BOM component, export stops and asks for engineering review.
 - The K column finish uses a component-specific cutting-list finish when supplied; otherwise it falls back to the fixture schedule finish.
 - The exported filename follows `{Laser order number} {order date}-{ship date}.xlsx`; dates in the same month are compacted (for example, `RA-5075 Jul 02-26.xlsx`).
-
-
-## Project-root batch workflow
-
-Select the parent project folder once. It should contain one folder per fixture unit, using fixture tags from the project schedule (for example, T01A, T01B and T01C). Each fixture folder must contain:
-- One SolidWorks BOM workbook (.xls or .xlsx), preferably inside a folder named "SolidWorks BOM" or "BOM".
-- One drawing PDF, preferably named exactly after the fixture tag (for example, T01A.pdf).
-- One or more DXF files inside a folder named "DXF".
-
-An optional "Excel" folder may contain previous or generated workbooks; those workbooks are excluded from source BOM discovery. The app reports missing or ambiguous files per fixture. Use the batch buttons to generate one DXF-Based or Shop-Format workbook per successfully imported fixture. The detailed BOM Component Tree View is not part of the project-root workflow.
-
-Example:
-```text
-Project Root/
-├── T01A/
-│   ├── DXF/
-│   ├── Drawing PDF/T01A.pdf
-│   ├── SolidWorks BOM/T01A.xlsx
-│   └── Excel/                 (optional previous exports)
-├── T01B/
-│   ├── DXF/
-│   ├── Drawing PDF/T01B.pdf
-│   └── SolidWorks BOM/T01B.xlsx
-└── ...
-```
