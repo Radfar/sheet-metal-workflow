@@ -324,13 +324,14 @@ function buildShopStandardExportDescription(component) {
         // appended separately in bold by the Excel exporter.
         name = "Short Angle";
       } else if (isTroughSection) {
-        // Keep the approved identity, but remove the redundant Channel label
-        // when it appears immediately after "Trough section".
-        name = name.replace(/(Trough\s+section)(?:\s+Channel\b)/i, "$1")
-          .replace(/\s+/g, " ").trim();
+        // The approved shop identity is always "Trough section".
+        // The SolidWorks part number is appended separately in bold by the
+        // Excel exporter, so it must not be repeated in the description.
+        name = "Trough section";
       }
 
       description = description.replace(/\bFlat pattern\b/gi, "")
+        .replace(/\bChn'l\b/gi, "")
         .replace(/\s*\(Laser(?:\/SM)?\)\s*/gi, " ")
         .replace(/\s+/g, " ").trim();
       const gauge = description.match(/\b(?:16|11)GA\./i)?.[0] || "";
