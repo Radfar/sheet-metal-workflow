@@ -273,7 +273,6 @@ function formatShopInchDimension(value) {
   const fraction = numerator + "/" + denominator;
   return whole > 0 ? whole + " " + fraction : fraction;
 }
-
 function convertShopInchDimensions(description) {
   let result = description.replace(
     /(\d+(?:\.\d+)?)\s*([×x])\s*(\d+(?:\.\d+)?)\s*in\b/gi,
@@ -281,56 +280,34 @@ function convertShopInchDimensions(description) {
       formatShopInchDimension(first) + '"' + " " + separator + " " +
       formatShopInchDimension(second) + '"'
   );
-  result = result.replace(
-    /(\d+\.\d+)\s*in\b/gi,
-    (_match, value) => formatShopInchDimension(value) + '"'
-  );
+  result = result.replace(/(\d+\.\d+)\s*in\b/gi,
+    (_match, value) => formatShopInchDimension(value) + '"');
   return result;
 }
-
 function buildShopStandardExportDescription(component) {
   const existingDescription = String(component.description ?? "").trim();
-  const segments = existingDescription
-    .split(/\s+—\s+/)
-    .map(segment => segment.trim())
-    .filter(Boolean);
-
+  const segments = existingDescription.split(/\s+—\s+/).map(segment => segment.trim()).filter(Boolean);
   if (segments.length > 1) {
     const componentIdentity = segments.shift();
     segments.push(componentIdentity);
   }
-
   let description = segments.join(" ")
     .replace(/Material code\s+C16\b/gi, "16GA.")
     .replace(/Material code\s+C11\b/gi, "11GA.")
     .replace(/\bchannel\b/gi, "Chn'l")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  // The SolidWorks part number is exported separately as a quoted, bold suffix.
+    .replace(/\s+/g, " ").trim();
   const partNumber = String(component.partNumber ?? "").trim().replace(/^"+|"+$/g, "");
   if (partNumber) {
     const escapedPartNumber = partNumber.replace(/[|\\{}()[\]^$+*?.]/g, "\\$&");
-    description = description
-      .replace(new RegExp("\\s+\"?" + escapedPartNumber + "\"?$", "i"), "")
-      .trim();
+    description = description.replace(new RegExp("\\s+\"?" + escapedPartNumber + "\"?$", "i"), "").trim();
   }
-
   description = convertShopInchDimensions(description);
-
-  // Splice plates use a plate abbreviation immediately after their gauge.
-  if (partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3") {
-     // Splice plates retain their dedicated Plt. designation.
   if (partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3") {
     const gaugeMatch = description.match(/\b\d+GA\./i);
     if (gaugeMatch) {
       const gauge = gaugeMatch[0];
-      const remaining = description
-        .replace(/\bFlat pattern\b/gi, "")
-        .replace(gauge, "")
-        .replace(/\bPlate\b/gi, "")
-        .replace(/\s+/g, " ")
-        .trim();
+      const remaining = description.replace(/\bFlat pattern\b/gi, "").replace(gauge, "")
+        .replace(/\bPlate\b/gi, "").replace(/\s+/g, " ").trim();
       description = (gauge + " Plt. " + remaining).replace(/\s+/g, " ").trim();
     } else {
       description = description.replace(/\bFlat pattern\b/gi, "Plt.");
@@ -339,12 +316,9 @@ function buildShopStandardExportDescription(component) {
     const isAngle = /\bAngle\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(description + " " + partNumber);
     const isChannel = /\bChn'l\b/i.test(description);
     if (isAngle) {
-      description = description
-        .replace(/\bFlat pattern\b/gi, "")
-        .replace(/\bAngle\b/gi, "")
-        .replace(/\bANG\b/gi, "")
-        .replace(/\s+/g, " ")
-        .trim();
+      description = description.replace(/\bFlat pattern\b/gi, "")
+        .replace(/\bAngle\b/gi, "").replace(/\bANG\b/gi, "")
+        .replace(/\s+/g, " ").trim();
       const gaugeMatch = description.match(/\b\d+GA\./i);
       if (gaugeMatch) {
         const gauge = gaugeMatch[0];
@@ -353,7 +327,11 @@ function buildShopStandardExportDescription(component) {
     } else if (isChannel) {
       description = description.replace(/\bFlat pattern\b/gi, "");
     }
-  }ListIdentity","Approved common DXF identity / filename","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["cuttingListFinish","Laser order finish (optional)","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
+  }
+  return description.replace(/\s+/g, " ").trim();
+}
+
+const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["cuttingListIdentity","Approved common DXF identity / filename","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["cuttingListFinish","Laser order finish (optional)","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
 
 function engineeringExample(key, component) {
   const part = String(component.partNumber || "").toUpperCase();
