@@ -329,7 +329,7 @@ function buildShopStandardExportDescription(component) {
         .replace(/\s+/g, " ").trim();
       const gauge = description.match(/\b(?:16|11)GA\./i)?.[0] || "";
       const dimensions = gauge ? description.replace(gauge, "").trim() : description;
-      const profile = isEndcap ? "Plt." : (isGusset || isT01ATroughSection) ? "Chn'l" : "";
+      const profile = isEndcap ? "Plt." : isGusset ? "Chn'l" : isT01ATroughSection ? "Trough section" : "";
       description = [dimensions, gauge, profile, name].filter(Boolean).join(" ");
     } else {
       const sourceIdentity = description + " " + identity + " " + partNumber;
