@@ -1,3 +1,4 @@
+import { discoverProjectFixtureEntries } from "./project-folder.js";
 const $ = id => document.getElementById(id);
 
 let components = [];
@@ -998,18 +999,8 @@ async function importFixtureFolder(folderTag, providedEntries) {
 }
 
 async function importProjectRoot(entries, rootName) {
-  const normalized = entries.filter(entry => entry && entry.file && entry.path)
-    .map(entry => ({ file: entry.file, path: String(entry.path).replace(/\\/g, "/") }));
   const tags = schedule.map(item => item.tag);
-  const discovered = new Map();
-  for (const entry of normalized) {
-    const parts = entry.path.split("/").filter(Boolean);
-    if (parts.length < 3 || parts[0].toUpperCase() !== rootName.toUpperCase()) continue;
-    const tag = tags.find(value => value.toUpperCase() === parts[1].toUpperCase());
-    if (!tag) continue;
-    if (!discovered.has(tag)) discovered.set(tag, []);
-    discovered.get(tag).push({ file: entry.file, path: tag + "/" + parts.slice(2).join("/") });
-  }
+  const discovered = discoverProjectFixtureEntries(entries, rootName, tags);
   if (!discovered.size) throw new Error("No fixture folders matching the project schedule were found inside " + rootName + ".");
   importedProjectTags = [];
   selectedProjectRootName = rootName;
