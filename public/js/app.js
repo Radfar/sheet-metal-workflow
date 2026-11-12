@@ -310,7 +310,7 @@ function buildShopStandardExportDescription(component) {
     const isEndcap = /END[\s_-]*CAP|ENDCAP/i.test(identitySource);
     const isGusset = /GUSSET|\bGUS\b/i.test(identitySource);
     const isShortAngle = /SHORT[\s_-]*ANG/i.test(partNumber) || /SHORT[\s_-]*ANGLE/i.test(identity);
-    const isTroughSection = /TROUGH\s+SECTION/i.test(identitySource + " " + description);
+    const isTroughSection = /^T01A-[ABC]$/i.test(partNumber) || /TROUGH\s+SECTION/i.test(identitySource + " " + description);
 
     if (isEndcap || isGusset || isShortAngle || isTroughSection) {
       let name = identity;
@@ -331,7 +331,7 @@ function buildShopStandardExportDescription(component) {
       }
 
       description = description.replace(/\bFlat pattern\b/gi, "")
-        .replace(/\bChn'l\b/gi, "")
+        .replace(/\b(?:Chn'l|Channel)\b/gi, "")
         .replace(/\s*\(Laser(?:\/SM)?\)\s*/gi, " ")
         .replace(/\s+/g, " ").trim();
       const gauge = description.match(/\b(?:16|11)GA\./i)?.[0] || "";
