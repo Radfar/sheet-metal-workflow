@@ -23,7 +23,7 @@
 <body>
 <div class="card">
   <h1>PDF Drawing Extraction Test</h1>
-  <p class="muted">Temporary test page for the <code>feature/pdf-drawing-extraction-test</code> branch. The selected PDF is processed in the browser and is not uploaded to the server.</p>
+  <p class="muted">Engineering PDF extraction test. The selected PDF is processed locally in the browser and is not uploaded to the server. Values below are candidates and must be verified against the drawing.</p>
 
   <div class="row">
     <input id="pdfFile" type="file" accept="application/pdf,.pdf">
@@ -32,32 +32,41 @@
 
   <div id="status">Select a PDF to begin.</div>
 
-  <h2>Detected drawing data</h2>
+  <h2>Detected engineering data</h2>
   <table>
-    <thead><tr><th>Field</th><th>Detected value</th></tr></thead>
+    <thead><tr><th>Field</th><th>Detected value</th><th>Page</th><th>Confidence</th><th>Status</th></tr></thead>
     <tbody id="fields"></tbody>
   </table>
+  <h2>Detected BOM-like rows</h2>
+  <table>
+    <thead><tr><th>Item</th><th>Part number</th><th>Description</th><th>Qty</th><th>Page</th><th>Confidence</th></tr></thead>
+    <tbody id="bomRows"></tbody>
+  </table>
+  <h2>Detected parts / dimensions / notes</h2>
+  <div id="collections" class="muted"></div>
+  <h2>Extraction JSON</h2>
+  <textarea id="jsonOutput" readonly placeholder="Structured extraction will appear here..."></textarea>
 
   <h2>Raw extracted text</h2>
   <textarea id="rawText" readonly placeholder="Extracted PDF text will appear here..."></textarea>
 </div>
 
 <script type="module">
-import * as pdfjsLib from "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs";
-
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+import { extractPdfEngineeringData, engineeringSummary } from "/js/pdf-engineering.js";
 
 const fileInput = document.getElementById("pdfFile");
 const extractBtn = document.getElementById("extractBtn");
 const statusEl = document.getElementById("status");
 const rawTextEl = document.getElementById("rawText");
 const fieldsEl = document.getElementById("fields");
+const bomRowsEl = document.getElementById("bomRows");
+const collectionsEl = document.getElementById("collections");
+const jsonOutputEl = document.getElementById("jsonOutput");
 
 fileInput.addEventListener("change", () => {
   extractBtn.disabled = !fileInput.files.length;
   statusEl.textContent = fileInput.files.length
-    ? "PDF selected. Click Extract PDF text."
+    ? "PDF selected. Click Extract engineering data."
     : "Select a PDF to begin.";
 });
 
@@ -67,46 +76,49 @@ function escapeHtml(value) {
   }[ch]));
 }
 
-function firstMatch(text, patterns) {
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match?.[1]) return match[1].trim();
-  }
-  return "";
+function renderFields(data) {
+  const rows = engineeringSummary(data);
+  fieldsEl.innerHTML = rows.map(([field, value]) => {
+    const candidates = Object.values(data.fields || {}).flat().filter(item => {
+      const key = {
+        "Fixture tag":"fixtureTag",
+        "Project / store":"projectOrStore",
+        "Drawing number":"drawingNumber",
+        "Revision":"revision",
+        "Sheet":"sheetNumber",
+        "Material":"material",
+        "Thickness / gauge":"thickness",
+        "Finish":"finish",
+        "Drawing quantity":"drawingQuantity"
+      }[field];
+      return key && item.value === value;
+    });
+    const item = candidates[0];
+    return "<tr><td>" + escapeHtml(field) + "</td><td>" + escapeHtml(value || "Not detected") +
+      "</td><td>" + escapeHtml(item?.page || "—") + "</td><td>" +
+      escapeHtml(item ? Math.round(item.confidence * 100) + "%" : "—") +
+      "</td><td>" + escapeHtml(item?.status || "—") + "</td></tr>";
+  }).join("");
 }
 
-function detectDrawingData(text) {
-  const normalized = text.replace(/[\t ]+/g, " ").replace(/\r/g, "");
+function renderBomRows(data) {
+  bomRowsEl.innerHTML = data.bomRows?.length
+    ? data.bomRows.map(row =>
+      "<tr><td>" + escapeHtml(row.item) + "</td><td>" + escapeHtml(row.partNumber) +
+      "</td><td>" + escapeHtml(row.description) + "</td><td>" + escapeHtml(row.quantity) +
+      "</td><td>" + escapeHtml(row.page) + "</td><td>" + Math.round(row.confidence * 100) + "%</td></tr>"
+    ).join("")
+    : '<tr><td colspan="6">No BOM-like rows detected.</td></tr>';
+}
 
-  const rows = [
-    ["Project / Store", firstMatch(normalized, [
-      /(?:project|store)\s*(?:number|#|no\.?)[\s:]*([A-Za-z0-9_-]+)/i,
-      /Menlo Park\s*#?\s*(\d+)/i
-    ])],
-    ["Fixture tag", firstMatch(normalized, [
-      /fixture\s*(?:tag|number|#|no\.?)?[\s:]*([A-Z]\d+[A-Z]?)/i,
-      /\b(T\d{2}[A-Z]?)\b/i
-    ])],
-    ["Overall size", firstMatch(normalized, [
-      /overall\s*(?:size|dimensions?)\s*[:=]?\s*([^\n]+)/i,
-      /(?:fixture|assembly)\s*(?:size|dimensions?)\s*[:=]?\s*([^\n]+)/i
-    ])],
-    ["Finish", firstMatch(normalized, [
-      /finish\s*[:=]\s*([^\n]+)/i
-    ])],
-    ["Drawing quantity", firstMatch(normalized, [
-      /(?:drawing\s*)?quantity\s*[:=]\s*(\d+)/i,
-      /(?:qty|quantity)\s*[:=]\s*(\d+)/i
-    ])],
-    ["Drawing date", firstMatch(normalized, [
-      /drawing\s*date\s*[:=]\s*([^\n]+)/i
-    ])],
-    ["Part numbers found", [...new Set(
-      [...normalized.matchAll(/\bT\d{2}[A-Z]?-(?:A|B|C|ANG-\d+|SHORT-ANG)\b/gi)].map(m => m[0].toUpperCase())
-    )].join(", ")]
-  ];
-
-  return rows;
+function renderCollections(data) {
+  const parts = (data.parts || []).map(item => item.value).join(", ") || "None";
+  const dimensions = (data.dimensions || []).map(item => item.value).join(", ") || "None";
+  const notes = (data.notes || []).map(escapeHtml).join("<br>") || "None";
+  collectionsEl.innerHTML =
+    "<strong>Parts:</strong> " + escapeHtml(parts) +
+    "<br><strong>Dimensions:</strong> " + escapeHtml(dimensions) +
+    "<br><strong>Notes:</strong> " + notes;
 }
 
 extractBtn.addEventListener("click", async () => {
@@ -116,34 +128,26 @@ extractBtn.addEventListener("click", async () => {
   extractBtn.disabled = true;
   rawTextEl.value = "";
   fieldsEl.innerHTML = "";
-  statusEl.textContent = "Reading PDF...";
+  bomRowsEl.innerHTML = "";
+  collectionsEl.textContent = "";
+  jsonOutputEl.value = "";
+  statusEl.textContent = "Reading PDF and extracting text coordinates…";
 
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
-    let text = "";
-
-    for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
-      statusEl.textContent = `Reading page ${pageNo} of ${pdf.numPages}...`;
-      const page = await pdf.getPage(pageNo);
-      const content = await page.getTextContent();
-      const pageText = content.items.map(item => item.str || "").join(" ");
-      text += `\n\n--- PAGE ${pageNo} ---\n${pageText}`;
-    }
-
-    rawTextEl.value = text.trim();
-
-    const detected = detectDrawingData(text);
-    fieldsEl.innerHTML = detected.map(([field, value]) =>
-      `<tr><td>${escapeHtml(field)}</td><td>${escapeHtml(value || "Not detected")}</td></tr>`
-    ).join("");
-
+    const data = await extractPdfEngineeringData(file);
+    rawTextEl.value = data.text;
+    renderFields(data);
+    renderBomRows(data);
+    renderCollections(data);
+    jsonOutputEl.value = JSON.stringify(data, null, 2);
     statusEl.innerHTML =
-      `<span class="ok">Extraction completed.</span> Pages: ${pdf.numPages}. Characters: ${text.length}.`;
+      '<span class="ok">Engineering extraction completed.</span> Pages: ' +
+      data.pageCount + '. Text items: ' + data.extraction.textItems +
+      '. Lines: ' + data.extraction.lines + '.';
   } catch (error) {
     console.error(error);
     statusEl.innerHTML =
-      `<span class="warn">PDF extraction failed:</span> ${escapeHtml(error.message || error)}`;
+      '<span class="warn">PDF extraction failed:</span> ' + escapeHtml(error.message || error);
   } finally {
     extractBtn.disabled = false;
   }
