@@ -346,6 +346,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       fixtureDescription = "",
       finish = "",
       bomFilenameDescription = "",
+      shopFormat = false,
       shipDate = "",
       note = "",
       components = []
@@ -425,8 +426,29 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
 
         worksheet.getCell(rowNumber, 1).value =
           component.itemNo || String(pageIndex * BOM_ROWS_PER_SHEET + index + 1);
-        worksheet.getCell(rowNumber, 2).value =
-          String(component.description || component.partNumber || "").trim();
+        const descriptionCell = worksheet.getCell(rowNumber, 2);
+        const description = String(component.description || "").trim();
+        const partNumber = String(component.partNumber || "").trim().replace(/^"+|"+$/g, "");
+
+        if (shopFormat && !partNumber) {
+          throw new Error("Missing SolidWorks part number for BOM item " + (component.itemNo || rowNumber - 11) + ".");
+        }
+
+        if (shopFormat && partNumber) {
+          const baseFont = { ...(descriptionCell.font || {}) };
+          const richText = [];
+          if (description) {
+            richText.push({ text: description + " ", font: baseFont });
+          }
+          richText.push({
+            text: '"' + partNumber + '"',
+            font: { ...baseFont, bold: true }
+          });
+          descriptionCell.value = { richText };
+        } else {
+          descriptionCell.value = description || String(component.partNumber || "").trim();
+        }
+
         worksheet.getCell(rowNumber, 10).value = quantity;
 
         if (fixtureQty > 0) {
