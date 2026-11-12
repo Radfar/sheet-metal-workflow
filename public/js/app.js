@@ -278,7 +278,7 @@ function convertShopInchDimensions(description) {
   let result = description.replace(
     /(\d+(?:\.\d+)?)\s*([×x])\s*(\d+(?:\.\d+)?)\s*in\b/gi,
     (_match, first, separator, second) =>
-      formatShopInchDimension(first) + '" + "' + separator + " " +
+      formatShopInchDimension(first) + '"' + " " + separator + " " +
       formatShopInchDimension(second) + '"'
   );
   result = result.replace(
