@@ -267,10 +267,17 @@ function buildShopStandardExportDescription(component) {
     .map(segment => segment.trim())
     .filter(Boolean);
 
-  if (segments.length < 2) return existingDescription;
+  if (segments.length > 1) {
+    const componentIdentity = segments.shift();
+    segments.push(componentIdentity);
+  }
 
-  const componentIdentity = segments.shift();
-  return [...segments, componentIdentity].join(" — ");
+  return segments.join(" ")
+    .replace(/Material code\s+C16\b/gi, "16GA.")
+    .replace(/Material code\s+C11\b/gi, "11GA.")
+    .replace(/\bchannel\b/gi, "Chn'l")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["cuttingListIdentity","Approved common DXF identity / filename","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["cuttingListFinish","Laser order finish (optional)","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
