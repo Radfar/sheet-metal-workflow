@@ -539,7 +539,7 @@ function renderSelectedSchedule() {
 function renderSummary() {
   $("summaryRows").innerHTML = schedule.map(item => {
     const saved = fixtureData[item.tag] || {};
-    const imported = importedProjectTags.includes(item.tag) || Boolean(saved.sourceFiles?.solidworksBom);
+    const imported = importedProjectTags.includes(item.tag);
     const count = saved.components?.length || 0;
     const include = saved.includeInLaser !== false;
     return '<tr><td>' + esc(item.no) + '</td><td><strong>' + esc(item.tag) + '</strong></td><td>' +
@@ -1001,10 +1001,12 @@ async function importFixtureFolder(folderTag, providedEntries) {
 }
 
 async function importProjectRoot(entries, rootName) {
+  importedProjectTags = [];
+  $("projectBatchActions").hidden = true;
+  $("projectBatchStatus").textContent = "Discovering fixture folders…";
   const tags = schedule.map(item => item.tag);
   const discovered = discoverProjectFixtureEntries(entries, rootName, tags);
   if (!discovered.size) throw new Error("No fixture folders matching the project schedule were found inside " + rootName + ".");
-  importedProjectTags = [];
   selectedProjectRootName = rootName;
   const failures = [];
   for (const tag of tags) {
