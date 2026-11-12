@@ -261,38 +261,30 @@ function quoteShopPartId(value) {
 function formatShopInchDimension(value) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return value;
-
-  const thirtySeconds = Math.round(numericValue * 32);
-  const whole = Math.floor(thirtySeconds / 32);
-  let numerator = thirtySeconds % 32;
-
+  const sixteenths = Math.round(numericValue * 16);
+  const whole = Math.floor(sixteenths / 16);
+  let numerator = sixteenths % 16;
   if (numerator === 0) return String(whole);
-
-  let denominator = 32;
+  let denominator = 16;
   while (numerator % 2 === 0) {
     numerator /= 2;
     denominator /= 2;
   }
-
   const fraction = numerator + "/" + denominator;
   return whole > 0 ? whole + " " + fraction : fraction;
 }
 
 function convertShopInchDimensions(description) {
-  // Convert both values in paired dimensions such as 7.6875 × 9 in.
   let result = description.replace(
     /(\d+(?:\.\d+)?)\s*([×x])\s*(\d+(?:\.\d+)?)\s*in\b/gi,
     (_match, first, separator, second) =>
-      formatShopInchDimension(first) + " " + separator + " " +
+      formatShopInchDimension(first) + '" + "' + separator + " " +
       formatShopInchDimension(second) + '"'
   );
-
-  // Also convert standalone decimal inch dimensions such as 2.25 in.
   result = result.replace(
     /(\d+\.\d+)\s*in\b/gi,
     (_match, value) => formatShopInchDimension(value) + '"'
   );
-
   return result;
 }
 
@@ -328,25 +320,40 @@ function buildShopStandardExportDescription(component) {
 
   // Splice plates use a plate abbreviation immediately after their gauge.
   if (partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3") {
+     // Splice plates retain their dedicated Plt. designation.
+  if (partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3") {
     const gaugeMatch = description.match(/\b\d+GA\./i);
     if (gaugeMatch) {
       const gauge = gaugeMatch[0];
       const remaining = description
-        .replace(/\bFlat pattern\b/i, "")
+        .replace(/\bFlat pattern\b/gi, "")
         .replace(gauge, "")
-        .replace(/\bPlate\b/i, "")
+        .replace(/\bPlate\b/gi, "")
         .replace(/\s+/g, " ")
         .trim();
       description = (gauge + " Plt. " + remaining).replace(/\s+/g, " ").trim();
     } else {
-      description = description.replace(/\bFlat pattern\b/i, "Plt.");
+      description = description.replace(/\bFlat pattern\b/gi, "Plt.");
     }
-  }
-
-  return description;
-}
-
-const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["cuttingListIdentity","Approved common DXF identity / filename","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["cuttingListFinish","Laser order finish (optional)","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
+  } else {
+    const isAngle = /\bAngle\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(description + " " + partNumber);
+    const isChannel = /\bChn'l\b/i.test(description);
+    if (isAngle) {
+      description = description
+        .replace(/\bFlat pattern\b/gi, "")
+        .replace(/\bAngle\b/gi, "")
+        .replace(/\bANG\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const gaugeMatch = description.match(/\b\d+GA\./i);
+      if (gaugeMatch) {
+        const gauge = gaugeMatch[0];
+        description = description.replace(gauge, gauge + " Angle");
+      }
+    } else if (isChannel) {
+      description = description.replace(/\bFlat pattern\b/gi, "");
+    }
+  }ListIdentity","Approved common DXF identity / filename","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["cuttingListFinish","Laser order finish (optional)","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
 
 function engineeringExample(key, component) {
   const part = String(component.partNumber || "").toUpperCase();
