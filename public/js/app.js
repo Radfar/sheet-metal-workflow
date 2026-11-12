@@ -927,10 +927,10 @@ async function importFixtureFolder() {
     });
     const dxfResult = await dxfResponse.json();
     if (!dxfResponse.ok) throw new Error(dxfResult.error || "DXF filename parsing failed.");
-    let pdfResult = { text: "", pageCount: 0, fields: {}, parts: [], dimensions: [], bomRows: [], notes: [], extraction: {} };
+    let pdfResult = { text: "", pageCount: 0, fields: {}, parts: [], dimensions: [], bomRows: [], hardwareItems: [], notes: [], extraction: {} };
     let pdfWarning = "";
     try { pdfResult = await extractDrawingPdfText(pdfCandidates[0].file); }
-    catch (error) { pdfWarning = " PDF text extraction was unavailable (" + error.message + "); the drawing remains identified as a source reference."; }
+    catch (error) { pdfResult.extraction = { error: error.message }; pdfWarning = " PDF text extraction failed (" + error.message + "). No PDF-derived data was extracted; the drawing remains identified as a source reference."; }
     loadFixture(tag);
     bomLines = bomResult.components.map(line => ({ ...line, manual: false }));
     dxfFiles = dxfResult.components.map((component, index) => ({ ...component, sha256: dxfHashes[index] || "" }));
