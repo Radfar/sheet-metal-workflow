@@ -297,10 +297,8 @@ function buildShopStandardExportDescription(component) {
     .replace(/\bchannel\b/gi, "Chn'l")
     .replace(/\s+/g, " ").trim();
   const partNumber = String(component.partNumber ?? "").trim().replace(/^"+|"+$/g, "");
-  if (partNumber) {
-    const escapedPartNumber = partNumber.replace(/[|\\{}()[\]^$+*?.]/g, "\\$&");
-    description = description.replace(new RegExp("\\s+\"?" + escapedPartNumber + "\"?$", "i"), "").trim();
-  }
+  // Keep the unquoted part name in the description; the Excel export appends
+  // the same SolidWorks part number in quotation marks as a separate final token.
   description = convertShopInchDimensions(description);
   if (partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3") {
     const gaugeMatch = description.match(/\b(?:16|11)GA\./i);
