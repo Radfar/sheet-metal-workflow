@@ -999,7 +999,7 @@ async function importFixtureFolder(folderTag, providedEntries) {
 
 async function importProjectRoot(entries, rootName) {
   const normalized = entries.filter(entry => entry && entry.file && entry.path)
-    .map(entry => ({ file: entry.file, path: String(entry.path).replace(/\\\\/g, "/") }));
+    .map(entry => ({ file: entry.file, path: String(entry.path).replace(/\\/g, "/") }));
   const tags = schedule.map(item => item.tag);
   const discovered = new Map();
   for (const entry of normalized) {
@@ -1097,7 +1097,7 @@ async function generateProjectBatch(mode) {
     try {
       loadFixture(tag);
       await exportBomWorkbook(mode);
-      if (fixtureData[tag]?.bomGenerated) completed++;
+      if (fixtureData[tag]?.[mode === "shop" ? "shopBomGenerated" : "dxfBomGenerated"]) completed++;
       else failed.push(tag + ": export did not complete.");
     } catch (error) {
       failed.push(tag + ": " + error.message);
