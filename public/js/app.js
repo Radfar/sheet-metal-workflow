@@ -534,22 +534,24 @@ function renderSelectedSchedule() {
 }
 
 function renderSummary() {
-  const generated = schedule.filter(item => fixtureData[item.tag]?.bomGenerated);
-  $("summaryRows").innerHTML = generated.length ? generated.map(item => {
-    const saved = fixtureData[item.tag];
-    const count = saved?.components?.length || 0;
-    const include = saved?.includeInLaser !== false;
-    return '<tr><td>' + esc(item.no) + '</td><td>' + esc(item.tag) + '</td><td>' +
+  $("summaryRows").innerHTML = schedule.map(item => {
+    const saved = fixtureData[item.tag] || {};
+    const imported = importedProjectTags.includes(item.tag) || Boolean(saved.sourceFiles?.solidworksBom);
+    const count = saved.components?.length || 0;
+    const include = saved.includeInLaser !== false;
+    return '<tr><td>' + esc(item.no) + '</td><td><strong>' + esc(item.tag) + '</strong></td><td>' +
       esc(item.mounting) + '</td><td>' + esc(item.profile) + '</td><td>' +
       esc(item.width) + '</td><td>' + esc(item.length) + '</td><td>' +
       esc(item.finish) + '</td><td>' + esc(item.qty) + '</td><td>' +
-      esc(count) + '</td><td><span class="summary-check" title="BOM Excel generated">✓</span></td>' +
-      '<td><input type="checkbox" data-laser-include="' + esc(item.tag) + '"' + (include ? ' checked' : '') +
-      ' aria-label="Include ' + esc(item.tag) + ' in Laser Order Request"></td></tr>';
-  }).join("") : '<tr><td colspan="11" class="empty">No fixture BOM has been generated yet.</td></tr>';
+      esc(count || "—") + '</td><td>' + (imported ? "Imported" : "Not imported") + '</td><td>' +
+      (saved.shopBomGenerated ? "✓" : "—") + '</td><td>' +
+      (saved.dxfBomGenerated ? "✓" : "—") + '</td><td><input type="checkbox" data-laser-include="' +
+      esc(item.tag) + '"' + (saved.bomGenerated && include ? " checked" : "") +
+      (!saved.bomGenerated ? " disabled" : "") + ' aria-label="Include ' + esc(item.tag) +
+      ' in Laser Order Request"></td></tr>';
+  }).join("");
   updateLaserOrderButtonState();
 }
-
 function updateLaserOrderButtonState() {
   const hasSelectedGeneratedBom = schedule.some(item => {
     const saved = fixtureData[item.tag];
@@ -1236,6 +1238,7 @@ async function exportBomWorkbook(descriptionMode) {
     const missing = components.filter(component => !String(component.description || "").trim()).length;
     fixtureData[currentFixtureTag] = fixtureData[currentFixtureTag] || {};
     fixtureData[currentFixtureTag].bomGenerated = true;
+    fixtureData[currentFixtureTag][isShop ? "shopBomGenerated" : "dxfBomGenerated"] = true;
     fixtureData[currentFixtureTag].generatedAt = new Date().toISOString();
     fixtureData[currentFixtureTag].includeInLaser = fixtureData[currentFixtureTag].includeInLaser !== false;
     saveCurrentFixture();
