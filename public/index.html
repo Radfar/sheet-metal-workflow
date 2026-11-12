@@ -128,7 +128,7 @@
 
   <section class="panel compact-panel" id="componentTreePanel" hidden>
     <div class="heading"><h2><b>05</b> BOM Component Tree View</h2><small id="rowCount">0 components</small></div>
-    <p class="notice">SolidWorks controls part numbers and quantities. The BOM description is automatically enriched with the matched DXF flat-pattern dimensions and material code. Expand “Manufacturing data” to add verified finished-part dimensions, gauge, component type and optional manufacturing process; when available, these appear first in the shop-style description. DXF flat-pattern dimensions are kept as a separate reference and are never substituted for finished-part dimensions or gauge. Unknown values are omitted rather than guessed.</p>
+    <p class="notice">SolidWorks controls part numbers and quantities. The DXF-Based export enriches the BOM description with matched DXF flat-pattern dimensions and material code. Expand “Manufacturing data” to enter verified finished-part dimensions, gauge, component type and optional manufacturing process. The separate Shop-Standard export follows the historical channel, angle, plate and return-gusset formats. DXF dimensions and material codes are not appended to or substituted into the shop description; unknown values are omitted rather than guessed.</p>
     <div class="table-wrap">
       <table class="component-table">
         <thead><tr><th>Item</th><th>Part number</th><th>Qty / fixture</th><th>DXF match</th><th>Material</th><th>Flat size</th><th>Manufacturing description (BOM output)</th><th></th></tr></thead>
@@ -142,7 +142,7 @@
         <button id="exportShopBtn" class="secondary" disabled type="button">Generate Shop-Format BOM Excel</button>
       </div>
     </div>
-    <p id="bomExportStatus" class="status-text">Generate both versions to compare the DXF-enriched description with the shop-standard description.</p>
+    <p id="bomExportStatus" class="status-text">The DXF-Based export includes DXF flat-pattern dimensions and material codes. The Shop-Standard export uses entered manufacturing data only.</p>
   </section>
 
   <section class="panel">
