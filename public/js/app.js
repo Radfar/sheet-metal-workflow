@@ -5,6 +5,7 @@ let bomLines = [];
 let dxfFiles = [];
 let currentFixtureTag = "";
 let drawingText = "";
+let engineeringData = null;
 const fixtureData = {};
 let templateAssets = { stellarLogo: "", radioButton: "" };
 let selectedFixtureFolderEntries = null;
@@ -417,8 +418,10 @@ function loadFixture(tag) {
   dxfFiles = saved ? clone(saved.dxfFiles) : [];
   components = saved ? clone(saved.components) : [];
   drawingText = saved?.drawingText || "";
+  engineeringData = saved?.engineeringData || null;
   $("dxfInput").value = saved?.dxfText || "";
   if ($("drawingTextPreview")) $("drawingTextPreview").value = drawingText;
+  renderEngineeringExtraction(engineeringData);
   if ($("drawingTextDetails")) $("drawingTextDetails").hidden = !drawingText;
   if ($("dxfFilenamePreview")) $("dxfFilenamePreview").value = saved?.sourceFiles?.dxfFilenames?.map(path => path.split("/").pop()).join("\n") || "";
   if ($("dxfFilenameDetails")) $("dxfFilenameDetails").hidden = !saved?.sourceFiles?.dxfFilenames?.length;
@@ -629,18 +632,8 @@ $("parseBtn").addEventListener("click", async () => {
 });
 
 async function extractDrawingPdfText(pdfFile) {
-  const pdfjsLib = await import("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
-  const bytes = new Uint8Array(await pdfFile.arrayBuffer());
-  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
-  let text = "";
-  for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
-    const page = await pdf.getPage(pageNo);
-    const content = await page.getTextContent();
-    const pageText = content.items.map(item => item.str || "").join(" ");
-    text += "\n\n--- PAGE " + pageNo + " ---\n" + pageText;
-  }
-  return { text: text.trim(), pageCount: pdf.numPages };
+  const module = await import("/js/pdf-engineering.js");
+  return module.extractPdfEngineeringData(pdfFile);
 }
 
 async function readSelectedDirectory(handle) {
@@ -662,6 +655,50 @@ async function readSelectedDirectory(handle) {
     }
   }
   return entries;
+}
+
+function renderEngineeringExtraction(data) {
+  const summaryEl = $("engineeringExtractionSummary");
+  const jsonEl = $("engineeringExtractionJson");
+  const fieldsEl = $("engineeringExtractionFields");
+  if (!summaryEl || !jsonEl || !fieldsEl) return;
+
+  if (!data) {
+    summaryEl.textContent = "No engineering PDF data extracted yet.";
+    fieldsEl.innerHTML = "";
+    jsonEl.value = "";
+    return;
+  }
+
+  const first = key => data.fields?.[key]?.[0];
+  const rows = [
+    ["Fixture tag", first("fixtureTag")],
+    ["Project / store", first("projectOrStore")],
+    ["Drawing number", first("drawingNumber")],
+    ["Revision", first("revision")],
+    ["Sheet", first("sheetNumber")],
+    ["Material", first("material")],
+    ["Thickness / gauge", first("thickness")],
+    ["Finish", first("finish")],
+    ["Drawing quantity", first("drawingQuantity")]
+  ];
+
+  fieldsEl.innerHTML = rows.map(([label, item]) =>
+    "<tr><td>" + esc(label) + "</td><td>" + esc(item?.value || "Not detected") +
+    "</td><td>" + esc(item?.page || "—") + "</td><td>" +
+    esc(item ? Math.round(item.confidence * 100) + "%" : "—") +
+    "</td><td>" + esc(item?.status || "—") + "</td></tr>"
+  ).join("");
+
+  summaryEl.textContent =
+    "PDF pages: " + (data.pageCount || 0) +
+    " · text items: " + (data.extraction?.textItems || 0) +
+    " · lines: " + (data.extraction?.lines || 0) +
+    " · parts: " + (data.parts?.length || 0) +
+    " · dimensions: " + (data.dimensions?.length || 0) +
+    " · BOM-like rows: " + (data.bomRows?.length || 0);
+
+  jsonEl.value = JSON.stringify(data, null, 2);
 }
 
 function resetFolderValidation(message = "Select the current fixture folder.") {
@@ -787,7 +824,7 @@ async function importFixtureFolder() {
     });
     const dxfResult = await dxfResponse.json();
     if (!dxfResponse.ok) throw new Error(dxfResult.error || "DXF filename parsing failed.");
-    let pdfResult = { text: "", pageCount: 0 };
+    let pdfResult = { text: "", pageCount: 0, fields: {}, parts: [], dimensions: [], bomRows: [], notes: [], extraction: {} };
     let pdfWarning = "";
     try { pdfResult = await extractDrawingPdfText(pdfCandidates[0].file); }
     catch (error) { pdfWarning = " PDF text extraction was unavailable (" + error.message + "); the drawing remains identified as a source reference."; }
@@ -795,6 +832,7 @@ async function importFixtureFolder() {
     bomLines = bomResult.components.map(line => ({ ...line, manual: false }));
     dxfFiles = dxfResult.components.map((component, index) => ({ ...component, sha256: dxfHashes[index] || "" }));
     drawingText = pdfResult.text;
+    engineeringData = pdfResult;
     $("dxfInput").value = dxfNames.join("\n");
     rebuildComponents();
     fixtureData[tag].bomGenerated = false;
@@ -806,6 +844,7 @@ async function importFixtureFolder() {
       dxfFilenames: dxfEntries.map(entry => entry.path)
     };
     fixtureData[tag].drawingText = drawingText;
+    fixtureData[tag].engineeringData = engineeringData;
     saveCurrentFixture();
     $("bomStatus").textContent = bomResult.count + " BOM item(s) read from " + bomCandidates[0].path + ".";
     $("bomStatus").className = "ok";
@@ -816,6 +855,7 @@ async function importFixtureFolder() {
     $("dxfFilenameDetails").hidden = false;
     $("drawingTextPreview").value = drawingText || "No extractable text layer was found. The PDF remains available as a local source file during this folder selection.";
     $("drawingTextDetails").hidden = false;
+    renderEngineeringExtraction(engineeringData);
     status.textContent = "Folder validated. BOM: " + bomResult.count + " rows; DXF filenames: " + dxfEntries.length + "; PDF pages: " + (pdfResult.pageCount || "not extracted") + "." + pdfWarning + hashWarning;
     status.className = pdfWarning ? "status-text" : "ok";
     const unmatchedCount = components.filter(component => component.dxfIndex === "").length;
