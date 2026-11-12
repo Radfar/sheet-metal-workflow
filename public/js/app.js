@@ -124,35 +124,73 @@ function matchDxfIndex(partNumber, files, fixtureTag) {
 
   return bestScore >= 70 ? bestIndex : "";
 }
-function makeDraftDescription(partNumber, dxf) {
-  if (!dxf) return "";
-  const label = String(dxf.componentLabel || partNumber || "").toUpperCase();
-  let componentType = "";
+function makeDraftDescription() {
+  // A DXF filename alone does not contain the verified shop-description data.
+  // Do not create a manufacturing description from a component label or flat size.
+  return "";
+}
 
-  if (/SHORT[\s_-]*ANG/.test(label) || /SHORT[\s_-]*ANG/.test(String(partNumber).toUpperCase())) {
-    componentType = "Short angle";
-  } else if (/\bANG(?:LE)?\b/.test(label) || /\bANG(?:LE)?\b/.test(String(partNumber).toUpperCase())) {
-    componentType = "Angle";
-  } else if (/TROUGH/.test(label)) {
-    componentType = "Trough section";
-  } else if (/END[\s_-]*CAP/.test(label) || /END[\s_-]*CAP/.test(String(partNumber).toUpperCase())) {
-    componentType = "End cap";
-  } else if (/GUS/.test(label) || /GUSSET/.test(String(partNumber).toUpperCase())) {
-    componentType = "Gusset";
-  } else if (/SPLICE[\s_-]*PLT/.test(label) || /SPLICE[\s_-]*PLT/.test(String(partNumber).toUpperCase())) {
-    componentType = "Splice plate";
+function buildShopBomDescription(component) {
+  const value = key => String(component[key] ?? "").trim();
+  const type = value("componentType");
+  const gauge = value("gauge");
+  const process = value("manufacturingProcess");
+  const partId = value("partIdentification") || value("partNumber");
+  const partToken = partId ? '"' + partId + '"' : "";
+  const required = [];
+  let description = "";
+
+  if (type === "Angle" || type === "Channel") {
+    if (!value("crossSectionDimensions")) required.push("Cross-section dimensions");
+    if (!gauge) required.push("Thickness / gauge");
+    if (!value("overallLength")) required.push("Overall finished length");
+    if (!required.length) {
+      description = [
+        value("crossSectionDimensions"),
+        gauge,
+        type === "Channel" ? "Chn'l" : "Angle",
+        "x " + value("overallLength"),
+        process ? "(" + process + ")" : "",
+        partToken
+      ].filter(Boolean).join(" ");
+    }
+  } else if (type === "Plate") {
+    if (!value("plateLength")) required.push("Plate length");
+    if (!value("plateWidth")) required.push("Plate width");
+    if (!gauge) required.push("Thickness / gauge");
+    if (!required.length) description = [
+      value("plateLength"), "x " + value("plateWidth"), gauge, "Plt.",
+      process ? "(" + process + ")" : "", partToken
+    ].filter(Boolean).join(" ");
+  } else if (type === "Gusset") {
+    if (!value("geometryDimensions")) required.push("Geometry dimensions");
+    if (!gauge) required.push("Thickness / gauge");
+    if (!required.length) description = [
+      value("geometryDimensions"), gauge, value("profileType"),
+      value("additionalDimensions") ? "x " + value("additionalDimensions") : "",
+      "Return Gusset", process ? "(" + process + ")" : "", partToken
+    ].filter(Boolean).join(" ");
+  } else if (type === "Purchased hardware") {
+    if (!value("hardwareSize")) required.push("Hardware size");
+    if (!value("hardwareType")) required.push("Hardware type / specification");
+    if (!required.length) description = [
+      value("hardwareSize"), value("hardwareType"),
+      value("hardwareLength") ? "x " + value("hardwareLength") : ""
+    ].filter(Boolean).join(" ");
+  } else if (type) {
+    if (!value("geometryDimensions") && !value("overallLength")) {
+      required.push("Geometry dimensions or overall finished length");
+    }
+    if (!required.length) description = [
+      value("geometryDimensions"), gauge, type,
+      value("overallLength") ? "x " + value("overallLength") : "",
+      process ? "(" + process + ")" : "", partToken
+    ].filter(Boolean).join(" ");
   } else {
-    componentType = label.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+    required.push("Component type");
   }
 
-  if (!componentType) return "";
-  const part = String(partNumber || "").trim();
-  const dimensions = dxf.flatWidth && dxf.flatHeight
-    ? "Flat pattern " + dxf.flatWidth + " × " + dxf.flatHeight + " in"
-    : "";
-  const material = dxf.materialCode ? "Material code " + dxf.materialCode : "";
-  return [componentType + (part ? " " + part : ""), dimensions, material]
-    .filter(Boolean).join(" — ");
+  return { description, missing: required };
 }
 
 
@@ -206,7 +244,7 @@ function renderManufacturingFields(component, index) {
       if (key === "componentType") return '<label>' + label + '<select class="engineering-input" data-component-field="' + key + '">' + typeOptions.map(option => '<option value="' + esc(option) + '"' + (value === option ? ' selected' : '') + '>' + esc(option || 'Select type') + '</option>').join("") + '</select><small class="field-example">' + esc(engineeringExample(key, component)) + '</small></label>';
       return '<label>' + label + '<input class="engineering-input" type="text" data-component-field="' + key + '" value="' + esc(value) + '" placeholder="' + esc(engineeringExample(key, component)) + '"><small class="field-example">' + esc(engineeringExample(key, component)) + '</small></label>';
     }).join("") + '</div>' +
-    '<div class="engineering-actions"><button type="button" class="secondary" data-generate-description="' + index + '">Build BOM description from these fields</button><span>Only entered values are used; confirm the description before release.</span></div>' +
+    '<div class="engineering-actions"><button type="button" class="secondary" data-generate-description="' + index + '">Build shop-format BOM description</button><span>Only entered values are used; confirm the description before release.</span></div>' +
     '</details></td></tr>';
 }
 
@@ -913,27 +951,11 @@ $("componentRows").addEventListener("click", event => {
   if (buildButton) {
     const index = Number(buildButton.dataset.generateDescription);
     const component = components[index];
-    const value = key => String(component[key] ?? "").trim();
-    const type = value("componentType");
-    const gauge = value("gauge");
-    const process = value("manufacturingProcess");
-    const partId = value("partIdentification") || value("partNumber");
-    let description = "";
-    if (type === "Channel") {
-      description = [value("crossSectionDimensions"), gauge, "Chn'l", value("overallLength") ? "x " + value("overallLength") : "", process ? "(" + process + ")" : "", partId ? '"' + partId + '"' : "", value("pieceCount") ? "(Made in " + value("pieceCount") + "pcs.)" : "", value("pieceLengths") ? "(" + value("pieceLengths") + ")" : ""].filter(Boolean).join(" ");
-    } else if (type === "Angle") {
-      description = [value("crossSectionDimensions"), gauge, "Angle", value("overallLength") ? "x " + value("overallLength") : "", process ? "(" + process + ")" : "", partId ? '"' + partId + '"' : "", value("pieceCount") ? "(Made in " + value("pieceCount") + "pcs.)" : "", value("pieceLengths") ? "(" + value("pieceLengths") + ")" : ""].filter(Boolean).join(" ");
-    } else if (type === "Plate") {
-      description = [value("plateLength"), value("plateWidth") ? "x " + value("plateWidth") : "", gauge, "Plt.", process ? "(" + process + ")" : "", partId ? '"' + partId + '"' : ""].filter(Boolean).join(" ");
-    } else if (type === "Gusset") {
-      description = [value("geometryDimensions"), gauge, value("profileType"), value("additionalDimensions") ? "x " + value("additionalDimensions") : "", "Return Gusset", process ? "(" + process + ")" : ""].filter(Boolean).join(" ");
-    } else if (type === "Purchased hardware") {
-      description = [value("hardwareSize"), value("hardwareType"), value("hardwareLength") ? "x " + value("hardwareLength") : ""].filter(Boolean).join(" ");
-    } else {
-      description = [value("geometryDimensions"), gauge, type, value("overallLength"), process, partId].filter(Boolean).join(" — ");
-    }
-    if (!description.trim()) {
-      $("parseStatus").textContent = "Enter applicable manufacturing fields before building the description.";
+    const result = buildShopBomDescription(component);
+    const description = result.description;
+    if (result.missing.length || !description.trim()) {
+      $("parseStatus").textContent = "Complete these fields before building the shop-format description: " +
+        result.missing.join(", ") + ".";
       $("parseStatus").className = "error";
       return;
     }
