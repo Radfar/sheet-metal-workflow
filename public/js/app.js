@@ -342,7 +342,8 @@ function buildShopStandardExportDescription(component) {
           const gauge = gaugeMatch[0];
           description = description.replace(gauge, gauge + " Angle");
         }
-        if (identity) description = [description, identity].filter(Boolean).join(" ");
+        const angleIdentity = identity.replace(/^\s*Angle\s*/i, "").trim();
+        if (angleIdentity) description = [description, angleIdentity].filter(Boolean).join(" ");
       } else if (isChannel) {
         description = description.replace(/\bFlat pattern\b/gi, "");
         if (identity) description = [description, identity].filter(Boolean).join(" ");
