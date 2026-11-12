@@ -909,153 +909,123 @@ function setFolderValidation({ bomDxf = false, pdf = false, pdfText = false } = 
     : "Drawing PDF not yet validated";
 }
 
+async function importProjectRoot(entries, rootName) {
+  const normalized = entries.filter(entry => entry && entry.file && entry.path)
+    .map(entry => ({ file: entry.file, path: String(entry.path).replace(/\\\\/g, "/") }));
+  const tags = schedule.map(item => item.tag);
+  const discovered = new Map();
+  for (const entry of normalized) {
+    const parts = entry.path.split("/").filter(Boolean);
+    if (parts.length < 3 || parts[0].toUpperCase() !== rootName.toUpperCase()) continue;
+    const tag = tags.find(value => value.toUpperCase() === parts[1].toUpperCase());
+    if (!tag) continue;
+    if (!discovered.has(tag)) discovered.set(tag, []);
+    discovered.get(tag).push({ file: entry.file, path: tag + "/" + parts.slice(2).join("/") });
+  }
+  if (!discovered.size) throw new Error("No fixture folders matching the project schedule were found inside " + rootName + ".");
+  importedProjectTags = [];
+  const failures = [];
+  for (const tag of tags) {
+    if (!discovered.has(tag)) continue;
+    try {
+      await importFixtureFolder(tag, discovered.get(tag));
+      importedProjectTags.push(tag);
+    } catch (error) {
+      failures.push(tag + ": " + error.message);
+    }
+  }
+  selectedProjectRootName = rootName;
+  renderSummary();
+  $("fixtureFolderStatus").textContent = "Project folder " + rootName + ": " + importedProjectTags.length +
+    " fixture folder(s) imported; " + failures.length + " require attention.";
+  $("fixtureFolderStatus").className = failures.length ? "status-text" : "ok";
+  $("folderImportReview").textContent = importedProjectTags.length + " fixture folder(s) imported: " +
+    importedProjectTags.join(", ") + (failures.length ? ". Attention: " + failures.join(" | ") : "") +
+    ". Generate one Excel BOM per imported fixture.";
+  $("folderImportReview").className = failures.length ? "status-text" : "ok";
+  $("projectBatchActions").hidden = importedProjectTags.length === 0;
+  $("projectBatchStatus").textContent = importedProjectTags.length + " fixture unit(s) ready for batch export.";
+  if (failures.length) console.warn("Project folder import issues:", failures);
+}
+
 $("chooseFixtureFolderBtn").addEventListener("click", async () => {
   if (!("showDirectoryPicker" in window)) {
     $("fixtureFolderInput").click();
     return;
   }
-  resetFolderValidation("Selecting and reading the fixture folder…");
+  resetFolderValidation("Select the project root folder containing all fixture-unit folders…");
   try {
     const handle = await window.showDirectoryPicker({ mode: "read" });
-    selectedFixtureFolderEntries = await readSelectedDirectory(handle);
-    selectedFixtureFolderName = handle.name;
-    $("fixtureFolderStatus").textContent = "Selected folder: " + handle.name + " (" +
-      selectedFixtureFolderEntries.filter(entry => entry.file).length + " files discovered locally).";
+    $("fixtureFolderStatus").textContent = "Reading project folder " + handle.name + "…";
     $("fixtureFolderStatus").className = "status-text";
-    await importFixtureFolder();
+    await importProjectRoot(await readSelectedDirectory(handle), handle.name);
   } catch (error) {
     if (error.name !== "AbortError") {
-      $("fixtureFolderStatus").textContent = "Could not read the selected folder: " + error.message;
+      $("fixtureFolderStatus").textContent = error.message;
       $("fixtureFolderStatus").className = "error";
-      resetFolderValidation("Folder validation failed. Choose the correct fixture folder.");
+      resetFolderValidation("Project folder import failed. Check the folder structure.");
     }
   }
 });
 
 $("fixtureFolderInput").addEventListener("change", async () => {
-  selectedFixtureFolderEntries = null;
-  selectedFixtureFolderName = "";
   const files = Array.from($("fixtureFolderInput").files || []);
-  $("fixtureFolderStatus").textContent = files.length
-    ? "Selected folder: " + (files[0].webkitRelativePath || files[0].name).split("/")[0] + " (" + files.length + " files)."
-    : "Select the current fixture folder.";
+  if (!files.length) return;
+  const firstPath = String(files[0].webkitRelativePath || files[0].name).replace(/\\\\/g, "/");
+  const rootName = firstPath.split("/")[0];
+  const entries = files.map(file => ({
+    file,
+    path: String(file.webkitRelativePath || file.name).replace(/\\\\/g, "/")
+  }));
+  $("fixtureFolderStatus").textContent = "Reading project folder " + rootName + "…";
   $("fixtureFolderStatus").className = "status-text";
-  if (!files.length) {
-    resetFolderValidation();
-    return;
-  }
-  resetFolderValidation("Reading the selected fixture folder…");
   try {
-    await importFixtureFolder();
+    await importProjectRoot(entries, rootName);
   } catch (error) {
     $("fixtureFolderStatus").textContent = error.message;
     $("fixtureFolderStatus").className = "error";
-    resetFolderValidation("Folder validation failed. Choose the correct fixture folder.");
+    resetFolderValidation("Project folder import failed. Check the folder structure.");
+  } finally {
+    $("fixtureFolderInput").value = "";
   }
 });
 
-async function importFixtureFolder(folderTag = $("fixtureSelect").value, providedEntries = null) {
-  const selected = providedEntries || selectedFixtureFolderEntries || Array.from($("fixtureFolderInput").files || []);
-  const tag = folderTag;
-  const status = $("fixtureFolderStatus");
-  if (!selected.length) throw new Error("Select the fixture folder first.");
-  if (!tag) throw new Error("Select a fixture tag from the project schedule.");
-  const entries = selected.map(entry => entry && entry.path
-    ? entry
-    : ({ file: entry, path: String(entry.webkitRelativePath || entry.name).replace(/\\/g, "/") }));
-  const roots = [...new Set(entries.map(entry => entry.path.split("/")[0]))];
-  if (roots.length !== 1 || roots[0] !== tag) {
-    throw new Error("The selected folder must be named exactly " + tag + " (uppercase, matching the schedule). Found: " + roots.join(", "));
+async function generateProjectBatch(mode) {
+  const button = mode === "shop" ? $("projectShopBtn") : $("projectDxfBtn");
+  const other = mode === "shop" ? $("projectDxfBtn") : $("projectShopBtn");
+  const tags = schedule.map(item => item.tag).filter(tag =>
+    importedProjectTags.includes(tag) && fixtureData[tag]?.components?.length
+  );
+  if (!tags.length) {
+    $("projectBatchStatus").textContent = "No valid fixture BOMs are available. Import the project folder first.";
+    $("projectBatchStatus").className = "error";
+    return;
   }
-  const bomCandidates = entries.filter(entry => entry.path === tag + "/" + tag + ".xls" || entry.path === tag + "/" + tag + ".xlsx");
-  if (bomCandidates.length !== 1) throw new Error("Expected exactly one " + tag + ".xls or " + tag + ".xlsx directly inside the fixture folder.");
-  const pdfCandidates = entries.filter(entry => entry.path === tag + "/" + tag + ".pdf");
-  if (pdfCandidates.length !== 1) throw new Error("Expected drawing file " + tag + ".pdf directly inside the fixture folder.");
-  if (entries.some(entry => {
-    const folderName = entry.path.split("/")[1];
-    return folderName && folderName.toUpperCase() === "DXF" && folderName !== "DXF";
-  })) throw new Error("The DXF subfolder must be named exactly DXF in uppercase.");
-  const dxfEntries = entries.filter(entry => {
-    const parts = entry.path.split("/");
-    return parts.length === 3 && parts[0] === tag && parts[1] === "DXF" && /\.dxf$/i.test(parts[2]);
-  }).sort((left, right) => left.path.localeCompare(right.path));
-  if (!dxfEntries.length) throw new Error("No DXF files found. Expected files directly inside " + tag + "/DXF/.");
-  status.textContent = "Reading the SolidWorks BOM and discovering DXF filenames…";
-  status.className = "status-text";
-  $("buildComponentTreeBtn").disabled = true;
-  const bomFile = bomCandidates[0].file;
-    const bomResponse = await fetch("/api/import-solidworks-bom", {
-      method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: bomFile
-    });
-    const bomResult = await bomResponse.json();
-    if (!bomResponse.ok) throw new Error(bomResult.error || "SolidWorks BOM import failed.");
-    const dxfNames = dxfEntries.map(entry => entry.path.split("/").pop());
-    let dxfHashes = [];
-    let hashWarning = "";
-    if (window.crypto?.subtle) {
-      try {
-        dxfHashes = await Promise.all(dxfEntries.map(async entry => {
-          const bytes = await entry.file.arrayBuffer();
-          const digest = await window.crypto.subtle.digest("SHA-256", bytes);
-          return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
-        }));
-      } catch (error) {
-        hashWarning = " DXF fingerprinting was unavailable (" + error.message + "); common-part detection will rely on explicit identities only.";
-      }
-    } else {
-      hashWarning = " Secure browser hashing is unavailable; common-part detection will rely on explicit identities only.";
+  button.disabled = true;
+  other.disabled = true;
+  let completed = 0;
+  const failed = [];
+  for (const tag of tags) {
+    try {
+      loadFixture(tag);
+      await exportBomWorkbook(mode);
+      if (fixtureData[tag]?.bomGenerated) completed++;
+      else failed.push(tag + ": export did not complete.");
+    } catch (error) {
+      failed.push(tag + ": " + error.message);
     }
-    const dxfResponse = await fetch("/api/parse-dxf-list", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filenames: dxfNames.join("\n") })
-    });
-    const dxfResult = await dxfResponse.json();
-    if (!dxfResponse.ok) throw new Error(dxfResult.error || "DXF filename parsing failed.");
-    let pdfResult = { text: "", pageCount: 0 };
-    let pdfWarning = "";
-    try { pdfResult = await extractDrawingPdfText(pdfCandidates[0].file); }
-    catch (error) { pdfWarning = " PDF text extraction was unavailable (" + error.message + "); the drawing remains identified as a source reference."; }
-    loadFixture(tag);
-    bomLines = bomResult.components.map(line => ({ ...line, descriptionOrigin: "solidworks", descriptionDraft: true, manual: false }));
-    dxfFiles = dxfResult.components.map((component, index) => ({ ...component, sha256: dxfHashes[index] || "" }));
-    drawingText = pdfResult.text;
-    $("dxfInput").value = dxfNames.join("\n");
-    rebuildComponents();
-    fixtureData[tag].bomGenerated = false;
-    fixtureData[tag].shopBomGenerated = false;
-    fixtureData[tag].dxfBomGenerated = false;
-    fixtureData[tag].generatedAt = "";
-    fixtureData[tag].includeInLaser = true;
-    fixtureData[tag].sourceFiles = {
-      fixtureFolder: tag, drawingPdf: pdfCandidates[0].path,
-      solidworksBom: bomCandidates[0].path, dxfFolder: tag + "/DXF/",
-      dxfFilenames: dxfEntries.map(entry => entry.path)
-    };
-    fixtureData[tag].drawingText = drawingText;
-    saveCurrentFixture();
-    $("bomStatus").textContent = bomResult.count + " BOM item(s) read from " + bomCandidates[0].path + ".";
-    $("bomStatus").className = "ok";
-    $("parseStatus").textContent = dxfFiles.length + " DXF filenames read from " + tag + "/DXF/. DXF file contents were not uploaded.";
-    $("parseStatus").className = "ok";
-    $("fixtureSourcePaths").textContent = "Sources: PDF " + pdfCandidates[0].path + " · BOM " + bomCandidates[0].path + " · DXF " + tag + "/DXF/ (" + dxfEntries.length + " filenames).";
-    $("dxfFilenamePreview").value = dxfNames.join("\n");
-    $("dxfFilenameDetails").hidden = false;
-    $("drawingTextPreview").value = drawingText || "No extractable text layer was found. The PDF remains available as a local source file during this folder selection.";
-    $("drawingTextDetails").hidden = false;
-    status.textContent = "Folder validated. BOM: " + bomResult.count + " rows; DXF filenames: " + dxfEntries.length + "; PDF pages: " + (pdfResult.pageCount || "not extracted") + "." + pdfWarning + hashWarning;
-    status.className = pdfWarning ? "status-text" : "ok";
-    const unmatchedCount = components.filter(component => component.dxfIndex === "").length;
-    setFolderValidation({ bomDxf: true, pdf: true, pdfText: Boolean(drawingText) });
-    $("folderImportReview").textContent = "Source files validated. " + (components.length - unmatchedCount) +
-      " BOM item(s) matched automatically; " + unmatchedCount + " remain unmatched for review. Build the BOM Component Tree View when ready.";
-    $("folderImportReview").className = "ok";
-    $("buildComponentTreeBtn").disabled = false;
-    $("componentTreePanel").hidden = true;
-    renderSummary();
-    selectedFixtureFolderEntries = null;
-    selectedFixtureFolderName = "";
-    $("fixtureFolderInput").value = "";
+  }
+  renderSummary();
+  $("projectBatchStatus").textContent = (mode === "shop" ? "Shop-format" : "DXF-based") +
+    " batch export: " + completed + " of " + tags.length + " workbook(s) generated." +
+    (failed.length ? " Failed: " + failed.join(" | ") : "") +
+    " Allow multiple downloads if your browser asks.";
+  $("projectBatchStatus").className = failed.length ? "status-text" : "ok";
+  button.disabled = false;
+  other.disabled = false;
 }
+$("projectDxfBtn").addEventListener("click", () => generateProjectBatch("dxf"));
+$("projectShopBtn").addEventListener("click", () => generateProjectBatch("shop"));
 
 $("buildComponentTreeBtn").addEventListener("click", () => {
   if (!components.length || $("buildComponentTreeBtn").disabled) return;
