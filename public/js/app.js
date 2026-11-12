@@ -911,6 +911,92 @@ function setFolderValidation({ bomDxf = false, pdf = false, pdfText = false } = 
     : "Drawing PDF not yet validated";
 }
 
+async function importFixtureFolder(folderTag, providedEntries) {
+  const tag = folderTag;
+  const entries = (providedEntries || []).filter(entry => entry && entry.file && entry.path);
+  if (!entries.length) throw new Error("No files were found in fixture folder " + tag + ".");
+  const isExcelOutput = path => path.split("/").some(part => /^excel$/i.test(part));
+  const workbooks = entries.filter(entry => /\.(xls|xlsx)$/i.test(entry.path) && !isExcelOutput(entry.path));
+  const preferredWorkbooks = workbooks.filter(entry => entry.path.split("/").some(part => /solid[\s_-]*works?|bom/i.test(part)));
+  let bomCandidates = preferredWorkbooks.length ? preferredWorkbooks : workbooks;
+  if (bomCandidates.length !== 1) {
+    const exact = workbooks.filter(entry => new RegExp("^" + tag + "\\.(xls|xlsx)$", "i").test(entry.path.split("/").pop()));
+    if (exact.length === 1) bomCandidates = exact;
+  }
+  if (bomCandidates.length !== 1) throw new Error(bomCandidates.length
+    ? "More than one possible SolidWorks BOM workbook was found outside the Excel output folder."
+    : "No SolidWorks BOM .xls/.xlsx workbook was found outside the Excel output folder.");
+  const pdfs = entries.filter(entry => /\.pdf$/i.test(entry.path));
+  const exactPdfs = pdfs.filter(entry => entry.path.split("/").pop().toLowerCase() === (tag + ".pdf").toLowerCase());
+  const pdfCandidates = exactPdfs.length ? exactPdfs : pdfs;
+  if (pdfCandidates.length !== 1) throw new Error(pdfCandidates.length
+    ? "More than one drawing PDF was found; name the intended file " + tag + ".pdf."
+    : "No drawing PDF was found.");
+  const dxfEntries = entries.filter(entry => {
+    const parts = entry.path.split("/");
+    return parts.some((part,index) => index > 0 && /^dxf$/i.test(part)) && /\.dxf$/i.test(entry.path);
+  }).sort((a,b) => a.path.localeCompare(b.path));
+  if (!dxfEntries.length) throw new Error("No DXF files were found inside a DXF subfolder.");
+  const bomResponse = await fetch("/api/import-solidworks-bom", {
+    method:"POST",headers:{"Content-Type":"application/octet-stream"},body:bomCandidates[0].file
+  });
+  const bomResult = await bomResponse.json();
+  if (!bomResponse.ok) throw new Error(bomResult.error || "SolidWorks BOM import failed.");
+  const dxfNames = dxfEntries.map(entry => entry.path.split("/").pop());
+  let dxfHashes = [];
+  if (window.crypto && window.crypto.subtle) {
+    try {
+      dxfHashes = await Promise.all(dxfEntries.map(async entry => {
+        const digest = await window.crypto.subtle.digest("SHA-256", await entry.file.arrayBuffer());
+        return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2,"0")).join("");
+      }));
+    } catch (error) { console.warn("DXF fingerprinting unavailable for " + tag, error); }
+  }
+  const dxfResponse = await fetch("/api/parse-dxf-list", {
+    method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({filenames:dxfNames.join("\n")})
+  });
+  const dxfResult = await dxfResponse.json();
+  if (!dxfResponse.ok) throw new Error(dxfResult.error || "DXF filename parsing failed.");
+  let pdfResult = {text:"",pageCount:0};
+  try { pdfResult = await extractDrawingPdfText(pdfCandidates[0].file); }
+  catch (error) { console.warn("PDF text extraction unavailable for " + tag, error); }
+  loadFixture(tag);
+  bomLines = bomResult.components.map(line => ({...line,descriptionOrigin:"solidworks",descriptionDraft:true,manual:false}));
+  dxfFiles = dxfResult.components.map((component,index) => ({...component,sha256:dxfHashes[index] || ""}));
+  drawingText = pdfResult.text;
+  $("dxfInput").value = dxfNames.join("\n");
+  rebuildComponents();
+  fixtureData[tag].bomGenerated = false;
+  fixtureData[tag].shopBomGenerated = false;
+  fixtureData[tag].dxfBomGenerated = false;
+  fixtureData[tag].generatedAt = "";
+  fixtureData[tag].includeInLaser = true;
+  fixtureData[tag].sourceFiles = {
+    fixtureFolder:(selectedProjectRootName ? selectedProjectRootName + "/" : "") + tag,
+    drawingPdf:pdfCandidates[0].path,
+    solidworksBom:bomCandidates[0].path,
+    dxfFolder:dxfEntries[0].path.split("/").slice(0,-1).join("/") + "/",
+    dxfFilenames:dxfEntries.map(entry => entry.path)
+  };
+  fixtureData[tag].drawingText = drawingText;
+  saveCurrentFixture();
+  $("bomStatus").textContent = bomResult.count + " BOM item(s) read from " + bomCandidates[0].path + ".";
+  $("bomStatus").className = "ok";
+  $("parseStatus").textContent = dxfFiles.length + " DXF filename(s) read from " + tag + ". DXF contents were not uploaded.";
+  $("parseStatus").className = "ok";
+  $("fixtureSourcePaths").textContent = "Sources for " + tag + ": PDF " + pdfCandidates[0].path +
+    " · BOM " + bomCandidates[0].path + " · DXF " + dxfEntries.length + " file(s).";
+  $("dxfFilenamePreview").value = dxfNames.join("\n");
+  $("dxfFilenameDetails").hidden = false;
+  $("drawingTextPreview").value = drawingText || "No extractable text layer was found; the PDF remains identified as a source reference.";
+  $("drawingTextDetails").hidden = false;
+  setFolderValidation({bomDxf:true,pdf:true,pdfText:Boolean(drawingText)});
+  $("buildComponentTreeBtn").disabled = false;
+  $("componentTreePanel").hidden = true;
+  renderSummary();
+  return {tag,bomCount:bomResult.count,dxfCount:dxfEntries.length,pdfPages:pdfResult.pageCount};
+}
+
 async function importProjectRoot(entries, rootName) {
   const normalized = entries.filter(entry => entry && entry.file && entry.path)
     .map(entry => ({ file: entry.file, path: String(entry.path).replace(/\\\\/g, "/") }));
