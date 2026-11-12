@@ -258,6 +258,44 @@ function quoteShopPartId(value) {
 // DXF-based BOM description. Keep every existing text segment unchanged;
 // move the DXF-derived details (flat-pattern dimensions/material code) before
 // the component identity. Do not derive or add manufacturing information.
+function formatShopInchDimension(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return value;
+
+  const thirtySeconds = Math.round(numericValue * 32);
+  const whole = Math.floor(thirtySeconds / 32);
+  let numerator = thirtySeconds % 32;
+
+  if (numerator === 0) return String(whole);
+
+  let denominator = 32;
+  while (numerator % 2 === 0) {
+    numerator /= 2;
+    denominator /= 2;
+  }
+
+  const fraction = numerator + "/" + denominator;
+  return whole > 0 ? whole + " " + fraction : fraction;
+}
+
+function convertShopInchDimensions(description) {
+  // Convert both values in paired dimensions such as 7.6875 × 9 in.
+  let result = description.replace(
+    /(\d+(?:\.\d+)?)\s*([×x])\s*(\d+(?:\.\d+)?)\s*in\b/gi,
+    (_match, first, separator, second) =>
+      formatShopInchDimension(first) + " " + separator + " " +
+      formatShopInchDimension(second) + '"'
+  );
+
+  // Also convert standalone decimal inch dimensions such as 2.25 in.
+  result = result.replace(
+    /(\d+\.\d+)\s*in\b/gi,
+    (_match, value) => formatShopInchDimension(value) + '"'
+  );
+
+  return result;
+}
+
 function buildShopStandardExportDescription(component) {
   const existingDescription = String(component.description ?? "").trim();
   const segments = existingDescription
@@ -278,13 +316,31 @@ function buildShopStandardExportDescription(component) {
     .trim();
 
   // The SolidWorks part number is exported separately as a quoted, bold suffix.
-  // Remove it from the description first if it is already present at the end.
   const partNumber = String(component.partNumber ?? "").trim().replace(/^"+|"+$/g, "");
   if (partNumber) {
     const escapedPartNumber = partNumber.replace(/[|\\{}()[\]^$+*?.]/g, "\\$&");
     description = description
       .replace(new RegExp("\\s+\"?" + escapedPartNumber + "\"?$", "i"), "")
       .trim();
+  }
+
+  description = convertShopInchDimensions(description);
+
+  // Splice plates use a plate abbreviation immediately after their gauge.
+  if (partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3") {
+    const gaugeMatch = description.match(/\b\d+GA\./i);
+    if (gaugeMatch) {
+      const gauge = gaugeMatch[0];
+      const remaining = description
+        .replace(/\bFlat pattern\b/i, "")
+        .replace(new RegExp("\\b" + gauge.replace(".", "\\.") + "\\b", "i"), "")
+        .replace(/\bPlate\b/i, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      description = (gauge + " Plt. " + remaining).replace(/\s+/g, " ").trim();
+    } else {
+      description = description.replace(/\bFlat pattern\b/i, "Plt.");
+    }
   }
 
   return description;
