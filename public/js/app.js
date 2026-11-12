@@ -259,6 +259,7 @@ function saveCurrentFixture() {
     bomFilenameDescription: $("bomFilenameDescription").value,
     sourceFiles: clone(fixtureData[currentFixtureTag]?.sourceFiles || {}),
     drawingText: drawingText || fixtureData[currentFixtureTag]?.drawingText || "",
+    engineeringData: clone(engineeringData || fixtureData[currentFixtureTag]?.engineeringData || null),
     bomGenerated: Boolean(fixtureData[currentFixtureTag]?.bomGenerated),
     generatedAt: fixtureData[currentFixtureTag]?.generatedAt || "",
     includeInLaser: fixtureData[currentFixtureTag]?.includeInLaser !== false
