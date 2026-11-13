@@ -104,11 +104,6 @@
       <textarea id="drawingTextPreview" rows="8" readonly></textarea>
     </details>
     <p id="folderImportReview" class="status-text">Each discovered fixture folder will be validated separately. Missing or ambiguous files will be reported.</p>
-    <div id="projectBatchActions" class="actions project-batch-actions" hidden>
-      <button id="projectDxfBtn" type="button">Generate DXF-Based BOM Excel</button>
-      <button id="projectShopBtn" class="secondary" type="button">Generate Shop-Format BOM Excel</button>
-      <span id="projectBatchStatus" class="status-text">No fixture folders imported yet.</span>
-    </div>
   </section>
 
   </section>
@@ -160,6 +155,11 @@
         <thead><tr><th>#</th><th>Tag</th><th>Mounting</th><th>Profile</th><th>Width</th><th>Length</th><th>Finish</th><th>Qty</th><th>BOM items</th><th>Import status</th><th>Shop BOM</th><th>DXF BOM</th><th>Include in Laser Order</th></tr></thead>
         <tbody id="summaryRows"><tr><td colspan="13" class="empty">Select a project folder to discover fixture units.</td></tr></tbody>
       </table>
+    </div>
+    <div id="projectBatchActions" class="actions project-batch-actions" hidden>
+      <button id="projectDxfBtn" type="button">Generate DXF-Based BOM Excel</button>
+      <button id="projectShopBtn" class="secondary" type="button">Generate Shop-Format BOM Excel</button>
+      <span id="projectBatchStatus" class="status-text">No fixture folders imported yet.</span>
     </div>
   </section>
 
