@@ -515,6 +515,7 @@ function renderScheduleEditor() {
       '<td><input class="schedule-cell" data-schedule-field="length" value="' + esc(item.length) + '"></td>' +
       '<td><input class="schedule-cell" data-schedule-field="finish" value="' + esc(item.finish) + '"></td>' +
       '<td><input class="schedule-cell qty-cell" type="number" min="0" step="any" data-schedule-field="qty" value="' + esc(item.qty) + '"></td>' +
+      '<td><button class="remove schedule-remove" type="button" data-delete-schedule-index="' + index + '">Delete</button></td>' +
     '</tr>'
   ).join("");
 }
@@ -801,6 +802,60 @@ $("addScheduleRowBtn").addEventListener("click", () => {
   renderScheduleEditor();
   renderFixtureOptions();
   $("scheduleStatus").textContent = "New schedule row added. Enter its values, then select and load it.";
+  $("scheduleStatus").className = "ok";
+});
+
+$("scheduleRows").addEventListener("click", event => {
+  const button = event.target.closest("[data-delete-schedule-index]");
+  if (!button) return;
+
+  const index = Number(button.dataset.deleteScheduleIndex);
+  const row = schedule[index];
+  if (!row) return;
+
+  if (!window.confirm("Are you sure to delete this row?")) return;
+
+  const deletedTag = row.tag;
+  schedule.splice(index, 1);
+  schedule.forEach((item, rowIndex) => {
+    item.no = rowIndex + 1;
+  });
+
+  if (deletedTag) {
+    delete fixtureData[deletedTag];
+    importedProjectTags = importedProjectTags.filter(tag => tag !== deletedTag);
+    discoveredProjectTags = discoveredProjectTags.filter(tag => tag !== deletedTag);
+  }
+
+  const deletedCurrentFixture = currentFixtureTag === deletedTag;
+  if (deletedCurrentFixture) {
+    currentFixtureTag = "";
+    if (schedule.length) {
+      $("fixtureSelect").value = schedule[0].tag;
+      loadFixture(schedule[0].tag);
+    } else {
+      $("fixtureSelect").innerHTML = "";
+      $("fixtureTag").value = "";
+      $("fixtureQuantity").value = "";
+      $("fixtureDescription").value = "";
+      $("finish").value = "";
+      $("finishDescription").value = "";
+      $("bomFilenameDescription").value = "";
+      $("currentFixtureLabel").textContent = "No fixture loaded";
+      renderSelectedSchedule();
+      render();
+    }
+  }
+
+  renderScheduleEditor();
+  renderFixtureOptions();
+  if (!deletedCurrentFixture) {
+    renderSelectedSchedule();
+    renderSummary();
+  }
+  $("scheduleStatus").textContent = deletedTag
+    ? "Schedule row " + (index + 1) + " (" + deletedTag + ") deleted."
+    : "Blank schedule row deleted.";
   $("scheduleStatus").className = "ok";
 });
 
