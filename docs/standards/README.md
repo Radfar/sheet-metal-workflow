@@ -95,7 +95,9 @@ The following component description patterns are implemented in the Shop-Standar
 
 | Component | Description structure | Example |
 |---|---|---|
+| Trough section | Flat-pattern dimensions + gauge + process + `Trough section` + quoted part number | `91 3/16" x 24 3/16" 16GA. (Laser/SM) Trough section "T01A-A"` |
 | End cap | Flat-pattern dimensions + gauge + `Plt.` + `(Laser)` + `End cap` + quoted part number | `7 11/16" x 9" 16GA. Plt. (Laser) End cap "ENDCAP"` |
+| Plate splice | Plate dimensions + gauge + `Plt.` + `(Laser)` + `Splice` + quoted part number | `2" x 8" 16GA. Plt. (Laser) Splice "SPLICE-PLT-2"` |
 | Gusset | Dimensions + gauge + `Chn'l` + `(Laser/SM)` + gusset description + quoted part number | `1 3/4" x 8 13/16" x 1 3/4" 16GA. Chn'l (Laser/SM) Return Gusset "GUS"` |
 | Short angle | Dimensions + gauge + `(Laser/SM)` + `Short Angle` + quoted part number | `11 3/4" x 2 3/16" 11GA. (Laser/SM) Short Angle "SHORT-ANG"` |
 | Angle | Dimensions + gauge + `Angle` + length; process marker may be appended | `1" x 1 3/8" 11GA. Angle x 78 7/8"` |
