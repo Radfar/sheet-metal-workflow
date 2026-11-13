@@ -1161,7 +1161,7 @@ async function generateProjectBatch(mode) {
 
     // JSZip is loaded only for batch export, so normal single-BOM operation
     // does not need an additional application dependency.
-    const JSZip = (await import("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js")).default;
+    const JSZip = (await import("https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm")).default;
     const zip = new JSZip();
     for (const file of files) zip.file(file.filename, file.blob);
     const zipBlob = await zip.generateAsync({type:"blob", compression:"DEFLATE", compressionOptions:{level:6}});
