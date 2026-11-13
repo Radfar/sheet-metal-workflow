@@ -58,3 +58,140 @@ Use this format:
 
 2" x 8" 16GA. Plt. **(Laser)** Splice **"SPLICE-PLT-3"**
 
+## BOM Excel filename
+
+The application generates the BOM workbook filename using this structure:
+
+```text
+BOM - PO [PO Number]([Schedule Row]) - [Fixture Tag] [Description].xlsx
+```
+
+Rules:
+1. Use the PO number from the project information.
+2. Include the fixture's schedule row number in parentheses immediately after the PO number.
+3. Include the fixture tag (for example, `T01A` or `T01B`).
+4. Include the BOM filename description.
+5. Remove characters that are invalid in filenames.
+
+Example:
+
+```text
+BOM - PO 4400012611(1) - T01A Recessed in GWB ceiling.xlsx
+```
+
+For individual exports, append the applicable output suffix:
+- `- Shop Standard.xlsx`
+- `- DXF-Based.xlsx`
+
+For project batch export, the generated workbooks are packaged in a ZIP file. Example:
+
+```text
+2605 - Shop-Format-BOMs.zip
+```
+
+## Shop-Standard BOM component descriptions
+
+The following component description patterns are implemented in the Shop-Standard BOM export.
+
+| Component | Description structure | Example |
+|---|---|---|
+| End cap | Flat-pattern dimensions + gauge + `Plt.` + `(Laser)` + `End cap` + quoted part number | `7 11/16" x 9" 16GA. Plt. (Laser) End cap "ENDCAP"` |
+| Gusset | Dimensions + gauge + `Chn'l` + `(Laser/SM)` + gusset description + quoted part number | `1 3/4" x 8 13/16" x 1 3/4" 16GA. Chn'l (Laser/SM) Return Gusset "GUS"` |
+| Short angle | Dimensions + gauge + `(Laser/SM)` + `Short Angle` + quoted part number | `11 3/4" x 2 3/16" 11GA. (Laser/SM) Short Angle "SHORT-ANG"` |
+| Angle | Dimensions + gauge + `Angle` + length; process marker may be appended | `1" x 1 3/8" 11GA. Angle x 78 7/8"` |
+| Channel | Dimensions + gauge + `Chn'l` + length, where available | `2" x 1" 16GA. Chn'l x 90"` |
+| Purchased hardware | Hardware size + hardware type + length | `#8 RH Tek Screw x 1/2"` |
+
+### General description formatting
+
+1. Material code `C16` is rendered as `16GA.` in Shop-Standard descriptions.
+2. Material code `C11` is rendered as `11GA.`.
+3. Decimal-inch dimensions exactly representable in sixteenths are converted to fractional inches (for example, `7.6875` becomes `7 11/16`).
+4. The prefix `Flat pattern` is removed from Shop-Standard descriptions.
+5. Where the description format includes a quoted part number, the part number is enclosed in double quotes and bold in the Excel output.
+6. Manufacturing process markers such as `(Laser)` and `(Laser/SM)` are bold in the Excel output.
+7. Trough sections use `Trough section`, not `Channel` or `Chn'l`.
+8. Ordinary channel components retain their generic channel description format.
+
+The examples above illustrate the implemented formatting patterns. Actual dimensions, gauges, component names, and part numbers must be taken from the applicable component data and drawings.
+
+## Cutting List / Laser Order Request filename
+
+The Cutting List workbook filename uses this structure:
+
+```text
+[Order Number] [Order Date]-[Ship Date].xlsx
+```
+
+Date formatting:
+- Same month: `Nov 13-20`
+- Different months in the same year: `Nov 28-Dec 05`
+- Different years: `Dec 28, 26-Jan 05, 27`
+
+Example:
+
+```text
+RA-5075 Nov 13-20.xlsx
+```
+
+If no order date is entered, the filename contains only the order number.
+
+## Cutting List sections and grouping
+
+The Laser Order Request workbook contains these sections:
+
+| Section | Material classification |
+|---|---|
+| `COMMON PARTS` | Components identified as common |
+| `16GA CRS` | 16-gauge cold-rolled steel |
+| `11GA CRS` | 11-gauge cold-rolled steel |
+
+### Common-part identification
+
+The application identifies common components using:
+1. An approved common DXF identity/key entered in the component data.
+2. A DXF filename identified as `COMMON`.
+3. Identical DXF file content, determined by SHA-256 hash, appearing in more than one fixture.
+
+The original DXF filename is retained in the Cutting List.
+
+Example DXF filename:
+
+```text
+ARI C16 2605 T01A ENDCAP 7.6875x9.DXF
+```
+
+Example Cutting List row:
+
+| DXF FILE NAME | MATERIAL | THK | Q. REQ'D |
+|---|---|---|---|
+| ARI C16 2605 T01A ENDCAP 7.6875x9.DXF | CRS | 16GA | Calculated quantity |
+
+### Required quantity calculation
+
+The required quantity is calculated as:
+
+```text
+Q. REQ'D = Quantity per assembly × Number of fixtures
+```
+
+When the same DXF identity is consolidated across multiple fixtures, the quantities are added together.
+
+The application groups Cutting List components by:
+- DXF identity
+- Material
+- Thickness
+- Finish
+
+Components without a matched DXF are excluded from the Cutting List. This includes purchased items that do not require laser cutting.
+
+## Material and thickness mapping
+
+The current automatic DXF material-code mapping is:
+
+| DXF material code | Material | Thickness |
+|---|---|---|
+| `C11` | CRS | 11GA |
+| `C16` | CRS | 16GA |
+
+The application also allows material grade and gauge to be entered manually. Manually entered values take precedence over the automatic DXF mapping.
