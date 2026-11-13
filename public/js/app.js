@@ -12,6 +12,7 @@ let selectedFixtureFolderEntries = null;
 let selectedFixtureFolderName = "";
 let selectedProjectRootName = "";
 let importedProjectTags = [];
+let discoveredProjectTags = [];
 
 
 function makeBomFilename() {
@@ -537,16 +538,24 @@ function renderSelectedSchedule() {
 }
 
 function renderSummary() {
-  $("summaryRows").innerHTML = schedule.map(item => {
-    const saved = fixtureData[item.tag] || {};
-    const imported = importedProjectTags.includes(item.tag);
+  if (!discoveredProjectTags.length) {
+    $("summaryRows").innerHTML = '<tr><td colspan="13" class="empty">Select a project folder to discover fixture units.</td></tr>';
+    updateLaserOrderButtonState();
+    return;
+  }
+
+  const visibleTags = schedule.map(item => item.tag).filter(tag => discoveredProjectTags.includes(tag));
+  $("summaryRows").innerHTML = visibleTags.map(tag => {
+    const item = schedule.find(entry => entry.tag === tag);
+    const saved = fixtureData[tag] || {};
+    const imported = importedProjectTags.includes(tag);
     const count = imported ? (saved.components?.length || 0) : 0;
     const include = saved.includeInLaser !== false;
     return '<tr><td>' + esc(item.no) + '</td><td><strong>' + esc(item.tag) + '</strong></td><td>' +
       esc(item.mounting) + '</td><td>' + esc(item.profile) + '</td><td>' +
       esc(item.width) + '</td><td>' + esc(item.length) + '</td><td>' +
       esc(item.finish) + '</td><td>' + esc(item.qty) + '</td><td>' +
-      esc(count || "—") + '</td><td>' + (imported ? "Imported" : "Not imported") + '</td><td>' +
+      esc(count || "—") + '</td><td>' + (imported ? "Imported" : "Attention") + '</td><td>' +
       (imported && saved.shopBomGenerated ? "✓" : "—") + '</td><td>' +
       (imported && saved.dxfBomGenerated ? "✓" : "—") + '</td><td><input type="checkbox" data-laser-include="' +
       esc(item.tag) + '"' + (imported && saved.bomGenerated && include ? " checked" : "") +
@@ -1005,12 +1014,14 @@ async function importFixtureFolder(folderTag, providedEntries) {
 
 async function importProjectRoot(entries, rootName) {
   importedProjectTags = [];
+  discoveredProjectTags = [];
   $("projectBatchActions").hidden = true;
   $("projectBatchStatus").textContent = "Discovering fixture folders…";
   renderSummary();
   const tags = schedule.map(item => item.tag);
   const discovered = discoverProjectFixtureEntries(entries, rootName, tags);
   if (!discovered.size) throw new Error("No fixture folders matching the project schedule were found inside " + rootName + ".");
+  discoveredProjectTags = tags.filter(tag => discovered.has(tag));
   selectedProjectRootName = rootName;
   const failures = [];
   for (const tag of tags) {
