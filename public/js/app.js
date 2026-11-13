@@ -964,6 +964,9 @@ async function importFixtureFolder(folderTag, providedEntries) {
   try { pdfResult = await extractDrawingPdfText(pdfCandidates[0].file); }
   catch (error) { console.warn("PDF text extraction unavailable for " + tag, error); }
   loadFixture(tag);
+  // loadFixture creates the fixture state only when a prior state exists.
+  // A first-time project-root import must initialize it before writing import flags.
+  if (!fixtureData[tag]) fixtureData[tag] = {};
   bomLines = bomResult.components.map(line => ({...line,descriptionOrigin:"solidworks",descriptionDraft:true,manual:false}));
   dxfFiles = dxfResult.components.map((component,index) => ({...component,sha256:dxfHashes[index] || ""}));
   drawingText = pdfResult.text;
@@ -1085,28 +1088,126 @@ async function generateProjectBatch(mode) {
     $("projectBatchStatus").className = "error";
     return;
   }
+
   button.disabled = true;
   other.disabled = true;
-  let completed = 0;
-  const failed = [];
-  for (const tag of tags) {
-    try {
-      loadFixture(tag);
-      await exportBomWorkbook(mode);
-      if (fixtureData[tag]?.[mode === "shop" ? "shopBomGenerated" : "dxfBomGenerated"]) completed++;
-      else failed.push(tag + ": export did not complete.");
-    } catch (error) {
-      failed.push(tag + ": " + error.message);
+  $("projectBatchStatus").textContent = "Generating " + (mode === "shop" ? "Shop-format" : "DXF-based") + " BOM workbooks…";
+
+  try {
+    // Generate each workbook in memory, then package all successful files into
+    // one ZIP. This avoids one browser download prompt per fixture.
+    const files = [];
+    const failed = [];
+
+    for (const tag of tags) {
+      try {
+        loadFixture(tag);
+        const payload = {
+          customer:$("customer").value,
+          projectName:$("projectName").value,
+          poNumber:$("poNumber").value,
+          projectNumber:$("projectNumber").value,
+          fixtureTag:$("fixtureTag").value,
+          scheduleRowNumber:(schedule.find(item => item.tag === $("fixtureTag").value) || {}).no || "",
+          fixtureQuantity:$("fixtureQuantity").value,
+          fixtureDescription:$("fixtureDescription").value,
+          finish:[$("finish").value, $("finishDescription").value].filter(Boolean).join(" = "),
+          bomFilenameDescription:$("bomFilenameDescription").value,
+          shopFormat:mode === "shop",
+          components:components.map(component => ({
+            itemNo:component.itemNo,
+            partNumber:component.partNumber,
+            quantityPerAssembly:component.quantityPerAssembly,
+            description:mode === "shop"
+              ? buildShopStandardExportDescription(component)
+              : component.description
+          }))
+        };
+
+        const response = await fetch("/api/export-bom-xlsx", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.error || "Excel export failed.");
+        }
+
+        const blob = await response.blob();
+        const disposition = response.headers.get("Content-Disposition") || "";
+        const filenameMatch = disposition.match(/filename="([^"]+)"/i);
+        const filename = filenameMatch
+          ? filenameMatch[1]
+          : makeBomFilename().replace(/\.xlsx$/i, "") +
+            (mode === "shop" ? " - Shop Standard.xlsx" : " - DXF-Based.xlsx");
+
+        files.push({ filename, blob });
+
+        fixtureData[tag] = fixtureData[tag] || {};
+        fixtureData[tag].bomGenerated = true;
+        fixtureData[tag][mode === "shop" ? "shopBomGenerated" : "dxfBomGenerated"] = true;
+        fixtureData[tag].generatedAt = new Date().toISOString();
+        fixtureData[tag].includeInLaser = fixtureData[tag].includeInLaser !== false;
+        saveCurrentFixture();
+      } catch (error) {
+        failed.push(tag + ": " + error.message);
+      }
     }
+
+    if (!files.length) {
+      throw new Error("No BOM workbooks were generated.");
+    }
+
+    // JSZip is loaded only for batch export, so normal single-BOM operation
+    // does not need an additional application dependency.
+    const JSZip = (await import("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js")).default;
+    const zip = new JSZip();
+    for (const file of files) zip.file(file.filename, file.blob);
+    const zipBlob = await zip.generateAsync({type:"blob", compression:"DEFLATE", compressionOptions:{level:6}});
+
+    const zipName = [
+      $("projectNumber").value || "Project",
+      mode === "shop" ? "Shop-Format-BOMs" : "DXF-Based-BOMs"
+    ].join(" - ") + ".zip";
+
+    if ("showSaveFilePicker" in window) {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: zipName,
+        types: [{
+          description:"ZIP archive",
+          accept:{"application/zip":[".zip"]}
+        }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(zipBlob);
+      await writable.close();
+    } else {
+      const url = URL.createObjectURL(zipBlob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = zipName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    renderSummary();
+    $("projectBatchStatus").textContent =
+      (mode === "shop" ? "Shop-format" : "DXF-based") +
+      " batch export: " + files.length + " workbook(s) packaged into " + zipName +
+      (failed.length ? ". Failed: " + failed.join(" | ") : ". Choose the ZIP save location once.");
+    $("projectBatchStatus").className = failed.length ? "status-text" : "ok";
+  } catch (error) {
+    $("projectBatchStatus").textContent = error.name === "AbortError"
+      ? "ZIP save cancelled. The generated workbooks remain available to generate again."
+      : error.message;
+    $("projectBatchStatus").className = error.name === "AbortError" ? "status-text" : "error";
+  } finally {
+    button.disabled = false;
+    other.disabled = false;
   }
-  renderSummary();
-  $("projectBatchStatus").textContent = (mode === "shop" ? "Shop-format" : "DXF-based") +
-    " batch export: " + completed + " of " + tags.length + " workbook(s) generated." +
-    (failed.length ? " Failed: " + failed.join(" | ") : "") +
-    " Allow multiple downloads if your browser asks.";
-  $("projectBatchStatus").className = failed.length ? "status-text" : "ok";
-  button.disabled = false;
-  other.disabled = false;
 }
 $("projectDxfBtn").addEventListener("click", () => generateProjectBatch("dxf"));
 $("projectShopBtn").addEventListener("click", () => generateProjectBatch("shop"));
