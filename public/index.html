@@ -156,26 +156,6 @@
     </div>
   </section>
 
-  <section class="panel" id="pdfAnalysisPanel">
-    <div class="heading"><h2><b>04</b> PDF drawing analysis — T01A through T14</h2><small>Extraction validation</small></div>
-    <p class="notice">PDF text is extracted locally in the browser. This trial covers fixture schedule entries through T14. T15 and T16 are held out for review, and T17 is excluded. Page layouts are checked using the observed T01A–T07 and T08–T14 drawing patterns. Purchased-item matches are candidates only; no candidate is added to a BOM automatically.</p>
-    <p id="pdfAnalysisStatus" class="status-text">Import the project folder to analyze drawing PDFs through T14 (excluding T15–T17).</p>
-    <h3 class="pdf-subheading">Page-content checks</h3>
-    <div class="table-wrap">
-      <table class="summary-table pdf-analysis-table">
-        <thead><tr><th>Fixture</th><th>Page checks — role and extraction result</th><th>PDF pages</th></tr></thead>
-        <tbody id="pdfPageCheckRows"><tr><td colspan="3" class="empty">No PDF page data available.</td></tr></tbody>
-      </table>
-    </div>
-    <h3 class="pdf-subheading">Possible purchased items — all pages searched</h3>
-    <div class="table-wrap">
-      <table class="summary-table pdf-analysis-table">
-        <thead><tr><th>Fixture</th><th>PDF page</th><th>Extracted candidate</th><th>Qty detected</th><th>Match level</th><th>Source text evidence</th></tr></thead>
-        <tbody id="pdfPurchasedRows"><tr><td colspan="6" class="empty">No purchased-item candidates detected yet.</td></tr></tbody>
-      </table>
-    </div>
-  </section>
-
   <section class="panel" id="dxfAuditPanel">
     <div class="heading"><h2><b>04</b> DXF ↔ PDF verification</h2><small>Engineering cross-check</small></div>
     <p class="notice">Every discovered DXF is inspected locally. The audit compares DXF filename metadata and readable DXF geometry with the extracted drawing PDF, the SolidWorks BOM and the fixture schedule. A warning means the data needs engineering review; it is not an automatic rejection. DXF contents are never uploaded.</p>
