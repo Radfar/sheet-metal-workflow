@@ -130,11 +130,13 @@ function findBomMatch(dxf, bomComponents, fixtureTag) {
   const targetTokens = target.split(" ").filter(Boolean);
 
   for (const component of bomComponents || []) {
-    const part = normalize(component.partNumber);
-    if (!part) continue;
-    const stripped = normalize(part.replace(normalize(fixtureTag), ""));
-    if (part === target || stripped === target || targetTokens.every(token => part.includes(token))) {
-      return component;
+    const sources = [component.partNumber, component.description].map(normalize).filter(Boolean);
+    if (!sources.length) continue;
+    for (const source of sources) {
+      const stripped = normalize(source.replace(normalize(fixtureTag), ""));
+      if (source === target || stripped === target || targetTokens.every(token => source.includes(token)) || targetTokens.every(token => stripped.includes(token))) {
+        return component;
+      }
     }
   }
   return null;
