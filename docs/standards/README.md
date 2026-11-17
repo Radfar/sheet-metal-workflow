@@ -8,7 +8,7 @@
 Use this format:
 
 ```text
-[Flat-pattern dimensions] [Gauge] (Process) Trough section "[Part number]"
+[Flat-pattern dimensions] [Gauge] (Process) "[Part number]"
 ```
 
 ### Rules
@@ -16,7 +16,7 @@ Use this format:
 1. Use the dimensions in fractional-inch format, as approved for the shop BOM.
 2. Put the verified gauge immediately after the dimensions (for example, `16GA.`).
 3. Put the manufacturing process in parentheses (for example, `(Laser/SM)`).
-4. Use the component name `Trough section`, followed by the exact part number in double quotes.
+4. Put the exact part number in double quotes after the process marker. Do not repeat the component name immediately before the part number.
 5. Do not include the prefix `Flat pattern`.
 6. Do not include `Channel` or `Chn'l` in a trough-section description.
 7. Apply this naming rule to trough sections in every fixture unit, not only T01A.
@@ -26,13 +26,13 @@ Use this format:
 ### Approved examples
 
 ```text
-91 3/16" x 24 3/16" 16GA. (Laser/SM) Trough section "T01A-A"
-91 1/4" x 24 3/16" 16GA. (Laser/SM) Trough section "T01A-B"
-91 3/16" x 24 3/16" 16GA. (Laser/SM) Trough section "T01A-C"
+91 3/16" x 24 3/16" 16GA. (Laser/SM) "T01A-A"
+91 1/4" x 24 3/16" 16GA. (Laser/SM) "T01A-B"
+91 3/16" x 24 3/16" 16GA. (Laser/SM) "T01A-C"
 
-91 3/16" x 24 3/16" 16GA. (Laser/SM) Trough section "T01B-A"
-91 1/4" x 24 3/16" 16GA. (Laser/SM) Trough section "T01B-B"
-91 3/16" x 24 3/16" 16GA. (Laser/SM) Trough section "T01B-C"
+91 3/16" x 24 3/16" 16GA. (Laser/SM) "T01B-A"
+91 1/4" x 24 3/16" 16GA. (Laser/SM) "T01B-B"
+91 3/16" x 24 3/16" 16GA. (Laser/SM) "T01B-C"
 ```
 
 This document will contain only rules and standards explicitly approved by the user. Proposed conventions, assumptions, and items awaiting confirmation must not be added as standards.
@@ -41,7 +41,7 @@ This document will contain only rules and standards explicitly approved by the u
 
 Use this format:
 
-[Plate dimensions] [Gauge] Plt. **(Laser)** Splice **"[Part number]"**
+[Plate dimensions] [Gauge] Plt. **(Laser)** **"[Part number]"**
 
 ### Rules
 
@@ -49,14 +49,14 @@ Use this format:
 2. Put the gauge immediately after the dimensions (for example, `16GA.`).
 3. Put `Plt.` immediately after the gauge.
 4. Put the process marker `(Laser)` after `Plt.` and make it bold in the Excel Shop BOM.
-5. Use the component name `Splice` after the process marker, in regular text.
+5. Do not repeat the component name `Splice` immediately before the part number.
 6. Put the exact part number at the end, enclosed in double quotes, and make the quoted part number bold in the Excel Shop BOM.
 
 ### Approved examples
 
-2" x 8" 16GA. Plt. **(Laser)** Splice **"SPLICE-PLT-2"**
+2" x 8" 16GA. Plt. **(Laser)** **"SPLICE-PLT-2"**
 
-2" x 8" 16GA. Plt. **(Laser)** Splice **"SPLICE-PLT-3"**
+2" x 8" 16GA. Plt. **(Laser)** **"SPLICE-PLT-3"**
 
 ## BOM Excel filename
 
@@ -95,11 +95,11 @@ The following component description patterns are implemented in the Shop-Standar
 
 | Component | Description structure | Example |
 |---|---|---|
-| Trough section | Flat-pattern dimensions + gauge + process + `Trough section` + quoted part number | `91 3/16" x 24 3/16" 16GA. (Laser/SM) Trough section "T01A-A"` |
+| Trough section | Flat-pattern dimensions + gauge + process + quoted part number | `91 3/16" x 24 3/16" 16GA. (Laser/SM) "T01A-A"` |
 | End cap | Flat-pattern dimensions + gauge + `Plt.` + `(Laser)` + quoted part number | `7 11/16" x 9" 16GA. Plt. (Laser) "ENDCAP"` |
 | Plate splice | Plate dimensions + gauge + `Plt.` + `(Laser)` + quoted part number | `2" x 8" 16GA. Plt. (Laser) "SPLICE-PLT-2"` |
 | Gusset | Dimensions + gauge + `Chn'l` + `(Laser/SM)` + gusset description + quoted part number | `1 3/4" x 8 13/16" x 1 3/4" 16GA. Chn'l (Laser/SM) Return Gusset "GUS"` |
-| Short angle | Dimensions + gauge + `(Laser/SM)` + `Short Angle` + quoted part number | `11 3/4" x 2 3/16" 11GA. (Laser/SM) Short Angle "SHORT-ANG"` |
+| Short angle | Dimensions + gauge + `(Laser/SM)` + quoted part number | `11 3/4" x 2 3/16" 11GA. (Laser/SM) "SHORT-ANG"` |
 | Angle | Dimensions + gauge + `Angle` + length; process marker may be appended | `1" x 1 3/8" 11GA. Angle x 78 7/8"` |
 | Channel | Dimensions + gauge + `Chn'l` + length, where available | `2" x 1" 16GA. Chn'l x 90"` |
 | Purchased hardware | Hardware size + hardware type + length | `#8 RH Tek Screw x 1/2"` |
