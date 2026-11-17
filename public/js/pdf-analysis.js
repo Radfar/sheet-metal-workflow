@@ -189,17 +189,19 @@ export function mapPurchasedItemsToBomRows(purchasedItems, gussetQuantity = 0) {
     ? normalizedGussetQuantity * 3
     : "";
   return (Array.isArray(purchasedItems) ? purchasedItems : []).map((candidate, index) => {
-    const description = String(candidate.description || "").trim();
+    const sourceDescription = String(candidate.description || "").trim();
+    const isNylokNut = /\\b10\\s*[-–]?\\s*32\\b.*\\bHEX\\s+NYLO?C?K\\s+NUT\\b/i.test(sourceDescription);
+    const description = isNylokNut
+      ? "10-32 HEX NYLOCK NUT (PAINT TO MATCH)"
+      : sourceDescription;
     const quantityText = String(candidate.quantity || "");
-    const quantityMatch = quantityText.match(/(?:^|\bQTY\.?\s*[:=#-]?\s*)(\d+(?:\.\d+)?)/i);
-    const quantityUnitMatch = quantityText.match(/\b(SETS?|PCS?|EA|EACH)\b/i);
-    const isEightRhTekScrew = /^#\s*8\s+RH\s+TEK\s+SCREWS?\s*x\s*1\s*\/\s*2\b/i.test(description);
+    const quantityMatch = quantityText.match(/(?:^|\\bQTY\\.?\\s*[:=#-]?\\s*)(\\d+(?:\\.\\d+)?)/i);
+    const isEightRhTekScrew = /^#\\s*8\\s+RH\\s+TEK\\s+SCREWS?\\s*x\\s*1\\s*\\/\\s*2\\b/i.test(sourceDescription);
     return {
       itemNo: "P" + (index + 1),
       purchasedItem: true,
       description,
       quantityPerAssembly: isEightRhTekScrew ? screwQuantity : (quantityMatch ? Number(quantityMatch[1]) : ""),
-      quantityUnit: quantityUnitMatch ? quantityUnitMatch[1].toUpperCase() : "",
       pageNumber: candidate.pageNumber,
       confidence: candidate.confidence,
       evidence: candidate.evidence
