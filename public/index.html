@@ -118,16 +118,6 @@
     </div>
   </section>
 
-  <section class="panel" hidden>
-    <div class="heading"><h2><b>04</b> DXF source filenames</h2><small>One filename per line</small></div>
-    <label class="input-label" for="dxfInput">Paste filenames from the selected fixture's DXF folder</label>
-    <textarea id="dxfInput" rows="5" placeholder="ARI C11 2605 T01A -ANG 1-92.625x2.18&#10;ARI C16 2605 ENDCAP 7.6875x9&#10;ARI C16 2605 T01A-A TROUGH 91.187x24.171"></textarea>
-    <div class="actions">
-      <button id="parseBtn" type="button">Parse and match DXF filenames</button>
-      <span id="parseStatus" class="status-text">DXF files are matched to the imported SolidWorks BOM where possible.</span>
-    </div>
-  </section>
-
   <section class="panel compact-panel" id="componentTreePanel" hidden>
     <div class="heading"><h2><b>05</b> BOM Component Tree View</h2><small id="rowCount">0 components</small></div>
     <p class="notice">SolidWorks controls part numbers and quantities. DXF files are used for matching, material/flat-size reference and the consolidated Laser Order Request. Expand “Manufacturing data” to enter verified finished-part dimensions, gauge, component type and optional manufacturing process. The Shop-Standard export follows the approved shop naming and formatting rules. DXF dimensions and material codes are not appended to or substituted into the shop description; unknown values are omitted rather than guessed.</p>
@@ -177,6 +167,18 @@
       <table class="summary-table pdf-analysis-table">
         <thead><tr><th>Fixture</th><th>PDF page</th><th>Extracted candidate</th><th>Qty detected</th><th>Match level</th><th>Source text evidence</th></tr></thead>
         <tbody id="pdfPurchasedRows"><tr><td colspan="6" class="empty">No purchased-item candidates detected yet.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="dxfAuditPanel">
+    <div class="heading"><h2><b>04</b> DXF ↔ PDF verification</h2><small>Engineering cross-check</small></div>
+    <p class="notice">Every discovered DXF is inspected locally. The audit compares DXF filename metadata and readable DXF geometry with the extracted drawing PDF, the SolidWorks BOM and the fixture schedule. A warning means the data needs engineering review; it is not an automatic rejection. DXF contents are never uploaded.</p>
+    <p id="dxfAuditStatus" class="status-text">Import the project folder to inspect every discovered DXF.</p>
+    <div class="table-wrap">
+      <table class="summary-table dxf-audit-table">
+        <thead><tr><th>Fixture</th><th>DXF file</th><th>Material</th><th>Flat size</th><th>Component identity</th><th>Result</th><th>Verification details</th></tr></thead>
+        <tbody id="dxfAuditRows"><tr><td colspan="7" class="empty">No DXF audit data available yet.</td></tr></tbody>
       </table>
     </div>
   </section>
