@@ -1209,11 +1209,10 @@ async function importFixtureFolder(folderTag, providedEntries) {
 async function importProjectRoot(entries, rootName) {
   projectImportInProgress = true;
   $("projectShopBtn").disabled = true;
-  $("projectBatchActions").hidden = true;
+  $("projectBatchActions").hidden = false;
   $("projectBatchStatus").textContent = "Importing fixture folders and preparing BOM data…";
   importedProjectTags = [];
   discoveredProjectTags = [];
-  $("projectBatchActions").hidden = true;
   $("projectBatchStatus").textContent = "Discovering fixture folders…";
   renderSummary();
   const tags = schedule.map(item => item.tag);
@@ -1249,14 +1248,15 @@ async function importProjectRoot(entries, rootName) {
 }
 
 $("chooseFixtureFolderBtn").addEventListener("click", async () => {
+  $("projectBatchActions").hidden = false;
+  projectImportInProgress = true;
+  updateProjectBatchButtonState();
+  $("projectBatchStatus").textContent = "Waiting for project folder selection…";
   if (!("showDirectoryPicker" in window)) {
     $("fixtureFolderInput").click();
     return;
   }
   resetFolderValidation("Select the project root folder containing all fixture-unit folders…");
-  projectImportInProgress = true;
-  updateProjectBatchButtonState();
-  $("projectBatchStatus").textContent = "Waiting for project folder selection…";
   try {
     const handle = await window.showDirectoryPicker({ mode: "read" });
     $("fixtureFolderStatus").textContent = "Reading project folder " + handle.name + "…";
@@ -1265,7 +1265,10 @@ $("chooseFixtureFolderBtn").addEventListener("click", async () => {
   } catch (error) {
     projectImportInProgress = false;
     updateProjectBatchButtonState();
-    if (error.name !== "AbortError") {
+    if (error.name === "AbortError") {
+      $("projectBatchStatus").textContent = "Project folder selection cancelled. Import a project folder to enable BOM generation.";
+      $("projectBatchStatus").className = "status-text";
+    } else {
       $("fixtureFolderStatus").textContent = error.message;
       $("fixtureFolderStatus").className = "error";
       $("projectBatchStatus").textContent = "Project folder import failed. Correct the folder structure and import again.";
@@ -1285,6 +1288,7 @@ $("fixtureFolderInput").addEventListener("change", async () => {
     path: String(file.webkitRelativePath || file.name).replace(/\\\\/g, "/")
   }));
   projectImportInProgress = true;
+  $("projectBatchActions").hidden = false;
   updateProjectBatchButtonState();
   $("projectBatchStatus").textContent = "Reading project folder " + rootName + "…";
   $("fixtureFolderStatus").textContent = "Reading project folder " + rootName + "…";
