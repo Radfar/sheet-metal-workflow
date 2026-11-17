@@ -596,7 +596,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           // descriptions in their source order.
           if (isSplicePlate) {
             const spliceDimensionsMatch = descriptionBody.match(
-              /^(\\s*)(\\d+(?:\\s+\\d+\\/\\d+|\\.\\d+)?)"(\\s*[xX]\\s*)(\\d+(?:\\s+\\d+\\/\\d+|\\.\\d+)?)"/
+              /^(\s*)(\d+(?:\s+\d+\/\d+|\.\d+)?)"(\s*[xX]\s*)(\d+(?:\s+\d+\/\d+|\.\d+)?)"/
             );
             if (spliceDimensionsMatch) {
               const firstDimension = parseDimensionInches(spliceDimensionsMatch[2]);
