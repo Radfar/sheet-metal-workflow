@@ -130,7 +130,7 @@
 
   <section class="panel compact-panel" id="componentTreePanel" hidden>
     <div class="heading"><h2><b>05</b> BOM Component Tree View</h2><small id="rowCount">0 components</small></div>
-    <p class="notice">SolidWorks controls part numbers and quantities. The DXF-Based export enriches the BOM description with matched DXF flat-pattern dimensions and material code. Expand “Manufacturing data” to enter verified finished-part dimensions, gauge, component type and optional manufacturing process. The separate Shop-Standard export follows the historical channel, angle, plate and return-gusset formats. DXF dimensions and material codes are not appended to or substituted into the shop description; unknown values are omitted rather than guessed.</p>
+    <p class="notice">SolidWorks controls part numbers and quantities. DXF files are used for matching, material/flat-size reference and the consolidated Laser Order Request. Expand “Manufacturing data” to enter verified finished-part dimensions, gauge, component type and optional manufacturing process. The Shop-Standard export follows the approved shop naming and formatting rules. DXF dimensions and material codes are not appended to or substituted into the shop description; unknown values are omitted rather than guessed.</p>
     <div class="table-wrap">
       <table class="component-table">
         <thead><tr><th>Item</th><th>Part number</th><th>Qty / fixture</th><th>DXF match</th><th>Material</th><th>Flat size</th><th>Manufacturing description (BOM output)</th><th></th></tr></thead>
@@ -140,11 +140,10 @@
     <div class="actions spread">
       <button id="addRowBtn" class="secondary" type="button">Add BOM item manually</button>
       <div class="export-actions">
-        <button id="exportBtn" disabled type="button">Generate DXF-Based BOM Excel</button>
         <button id="exportShopBtn" class="secondary" disabled type="button">Generate Shop-Format BOM Excel</button>
       </div>
     </div>
-    <p id="bomExportStatus" class="status-text">The DXF-Based export includes DXF flat-pattern dimensions and material codes. The Shop-Standard export uses entered manufacturing data only.</p>
+    <p id="bomExportStatus" class="status-text">DXF files remain available for matching and Laser Order Request generation. The Shop-Standard export uses the verified manufacturing data.</p>
   </section>
 
   <section class="panel">
@@ -152,12 +151,11 @@
     <div class="actions"><button id="generateSummaryBtn" type="button" hidden>Legacy summary refresh</button><span id="summaryStatus" class="status-text">Select a project folder to populate the schedule summary.</span></div>
     <div class="table-wrap summary-wrap">
       <table class="summary-table">
-        <thead><tr><th>#</th><th>Tag</th><th>Mounting</th><th>Profile</th><th>Width</th><th>Length</th><th>Finish</th><th>Qty</th><th>BOM items</th><th>Import status</th><th>Shop BOM</th><th>DXF BOM</th><th>Include in Laser Order</th></tr></thead>
+        <thead><tr><th>#</th><th>Tag</th><th>Mounting</th><th>Profile</th><th>Width</th><th>Length</th><th>Finish</th><th>Qty</th><th>BOM items</th><th>Import status</th><th>Shop BOM</th><th>Include in Laser Order</th></tr></thead>
         <tbody id="summaryRows"><tr><td colspan="13" class="empty">Select a project folder to discover fixture units.</td></tr></tbody>
       </table>
     </div>
     <div id="projectBatchActions" class="actions project-batch-actions" hidden>
-      <button id="projectDxfBtn" type="button">Generate DXF-Based BOM Excel</button>
       <button id="projectShopBtn" class="secondary" type="button">Generate Shop-Format BOM Excel</button>
       <span id="projectBatchStatus" class="status-text">No fixture folders imported yet.</span>
     </div>
