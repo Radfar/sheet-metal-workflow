@@ -114,10 +114,22 @@ function renderPdfAnalysis() {
     : '<tr><td colspan="6" class="empty">No purchased-item candidates detected yet. This does not prove that the drawings contain no purchased items.</td></tr>';
 }
 
+function getGussetQuantityForFixture(tag) {
+  const fixtureComponents = fixtureData[tag]?.components || (tag === currentFixtureTag ? components : []);
+  return fixtureComponents.reduce((total, component) => {
+    const identity = [component.partNumber, component.description, component.componentType]
+      .filter(Boolean).join(" ").toUpperCase();
+    if (!/GUSSET|\\bGUS\\b/.test(identity)) return total;
+    const quantity = Number(component.quantityPerAssembly);
+    return Number.isFinite(quantity) && quantity >= 0 ? total + quantity : total;
+  }, 0);
+}
+
 function getPurchasedItemsForFixture(tag) {
   const savedPages = fixtureData[tag]?.drawingPages || (tag === currentFixtureTag ? drawingPages : []);
   if (!savedPages.length) return [];
-  return mapPurchasedItemsToBomRows(analyzeDrawingPages(savedPages, tag).purchasedItems);
+  const gussetQuantity = getGussetQuantityForFixture(tag);
+  return mapPurchasedItemsToBomRows(analyzeDrawingPages(savedPages, tag).purchasedItems, gussetQuantity);
 }
 
 function normalizePart(value, fixtureTag) {
