@@ -170,7 +170,8 @@ function pdfContainsDimension(text, value) {
   return Number.isFinite(target) && extractPdfDimensions(text).some(item => numbersClose(item.value, target, 0.02));
 }
 
-function findPdfComponentContexts(pdfPages, componentLabel) {
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^{}()|[\]\\]/g, "\\function findPdfComponentContexts(pdfPages, componentLabel) {
   const target = normalize(componentLabel);
   if (!target) return [];
 
@@ -193,6 +194,34 @@ function findPdfComponentContexts(pdfPages, componentLabel) {
         text: normalizedText.slice(Math.max(0, index - 500), Math.min(normalizedText.length, index + normalizedTarget.length + 700))
       });
       searchFrom = index + normalizedTarget.length;
+    }
+  }
+
+  return contexts;
+}
+");
+}
+
+function findPdfComponentContexts(pdfPages, componentLabel) {
+  const target = String(componentLabel || "").trim();
+  if (!target) return [];
+
+  const labelPattern = target
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(escapeRegExp)
+    .join("\\s+");
+  const labelRegex = new RegExp(labelPattern, "ig");
+  const contexts = [];
+
+  for (const page of pdfPages || []) {
+    const text = String(page.text || "");
+    for (const match of text.matchAll(labelRegex)) {
+      const index = match.index ?? 0;
+      contexts.push({
+        pageNumber: Number(page.pageNumber),
+        text: text.slice(Math.max(0, index - 500), Math.min(text.length, index + match[0].length + 700))
+      });
     }
   }
 
