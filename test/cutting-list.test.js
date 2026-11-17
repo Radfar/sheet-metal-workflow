@@ -37,9 +37,14 @@ async function load(buffer) {
   return wb.getWorksheet("Laser Order Request");
 }
 
-function findRow(ws, text) {
+// Finds a data row by DXF name, or a section heading row when heading is true.
+// Heading rows contain the "laser_dxf" folder path and would otherwise match part names
+// such as TROUGH (they contain "RECESSED LIGHT TROUGHS").
+function findRow(ws, text, heading = false) {
   for (let r = 1; r <= ws.rowCount; r++) {
-    if (String(ws.getCell(r, 2).value ?? "").includes(text)) return r;
+    const value = String(ws.getCell(r, 2).value ?? "");
+    if (value.includes("laser_dxf") !== heading) continue;
+    if (value.includes(text)) return r;
   }
   return 0;
 }
@@ -65,7 +70,7 @@ test("sections with more lines than the template keep their names and merges", a
   const { buffer, lineCount } = await buildCuttingListWorkbook(payload(90));
   const ws = await load(buffer);
   assert.equal(lineCount, 92);
-  const heading11 = findRow(ws, "11GA CRS");
+  const heading11 = findRow(ws, "11GA CRS", true);
   const last16 = findRow(ws, "T01A-89 TROUGH");
   assert.ok(last16 > 0 && heading11 > last16, "11GA section must start after the last 16GA line");
   assert.equal(ws.getCell(last16, 10).value, 2);
