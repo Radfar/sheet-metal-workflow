@@ -148,7 +148,9 @@ The project workspace includes a browser-based PDF analysis review panel for sch
 - An adjacent explicit quantity such as `40 SETS` can be associated with a candidate when it appears in the same or immediately neighboring extracted text lines. The app does not calculate or infer missing quantities.
 - Each candidate retains its fixture tag, PDF page number, extracted description, source text evidence, and any explicitly detected quantity.
 - "Higher" means a recognized hardware term was accompanied by a size-like token; "Possible" means a hardware term was found without a size-like token. These are heuristic labels, not calibrated confidence scores.
-- The analysis does not infer a missing part number, unit, or purchasing status. It does not append candidates to the BOM. Engineering review is required before a later BOM-integration step.
+- The analysis does not infer a missing quantity. A detected quantity is written as a numeric per-assembly quantity, retaining an explicit unit such as SETS in the Excel number format; the workbook calculates total required quantity using the fixture schedule quantity. If no quantity is detected, the purchased-item row is still appended but its quantity and total-required cells remain blank.
+- Detected purchased-item candidates are appended after the existing SolidWorks-derived BOM groups, with one completely blank separator row immediately above the purchased-item section. They are not inserted into the SolidWorks source component list and are excluded from DXF cutting-list processing.
+- Purchased rows use temporary identifiers P1, P2, etc.; these are export row identifiers, not SolidWorks part numbers. The extracted description and quantity should be checked against the drawing before BOM release.
 - Image-only/scanned PDFs still require OCR; this trial does not perform OCR.
 
-This trial measures extraction quality on the T01A–T14 drawings before purchased-item candidates are allowed into the Shop-Standard BOM.
+The PDF analysis now feeds detected purchased-item candidates into the Shop-Standard BOM export while preserving the SolidWorks BOM as the source for fabricated component identities and quantities.
