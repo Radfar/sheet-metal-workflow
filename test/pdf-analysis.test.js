@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyzeDrawingPages } from "../public/js/pdf-analysis.js";
+import { analyzeDrawingPages, mapPurchasedItemsToBomRows } from "../public/js/pdf-analysis.js";
 
 test("finds purchased hardware and retains its source page", () => {
   const result = analyzeDrawingPages([
@@ -93,4 +93,30 @@ test("keeps a hardware candidate as possible when no size is stated", () => {
 
   assert.equal(result.purchasedItems[0].confidence, "Possible");
   assert.equal(result.purchasedItems[0].quantity, "");
+});
+
+
+test("maps detected SETS quantities and units into purchased BOM rows", () => {
+  const rows = mapPurchasedItemsToBomRows([
+    { description: "10-32 RHMS x 1/2 inch C/W HEX NYLOK NUT", quantity: "40 SETS", pageNumber: 2 },
+    { description: "#8 RH TEK SCREWS x 1/2 inch", quantity: "QTY: 12", pageNumber: 11 },
+    { description: "Tek Screw", quantity: "", pageNumber: 6 }
+  ]);
+
+  assert.deepEqual(rows.map(row => row.itemNo), ["P1", "P2", "P3"]);
+  assert.deepEqual(rows.map(row => row.quantityPerAssembly), [40, 12, ""]);
+  assert.deepEqual(rows.map(row => row.quantityUnit), ["SETS", "", ""]);
+  assert.ok(rows.every(row => row.purchasedItem));
+  assert.equal(rows[2].description, "Tek Screw");
+});
+
+test("omits empty purchased-item descriptions rather than creating blank BOM items", () => {
+  const rows = mapPurchasedItemsToBomRows([
+    { description: "", quantity: "5 PCS" },
+    { description: "Washer", quantity: "5 PCS" }
+  ]);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].itemNo, "P2");
+  assert.equal(rows[0].quantityPerAssembly, 5);
 });
