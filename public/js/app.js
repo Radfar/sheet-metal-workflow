@@ -1,5 +1,5 @@
 import { discoverProjectFixtureEntries } from "./project-folder.js";
-import { analyzeDrawingPages } from "./pdf-analysis.js";
+import { analyzeDrawingPages, mapPurchasedItemsToBomRows } from "./pdf-analysis.js";
 const $ = id => document.getElementById(id);
 
 let components = [];
@@ -117,21 +117,7 @@ function renderPdfAnalysis() {
 function getPurchasedItemsForFixture(tag) {
   const savedPages = fixtureData[tag]?.drawingPages || (tag === currentFixtureTag ? drawingPages : []);
   if (!savedPages.length) return [];
-  return analyzeDrawingPages(savedPages, tag).purchasedItems.map((candidate, index) => {
-    const quantityText = String(candidate.quantity || "");
-    const quantityMatch = quantityText.match(/(?:^|\bQTY\.?\s*[:=#-]?\s*)(\d+(?:\.\d+)?)/i);
-    const quantityUnitMatch = quantityText.match(/\b(SETS?|PCS?|EA|EACH)\b/i);
-    return {
-      itemNo: "P" + (index + 1),
-      purchasedItem: true,
-      description: candidate.description,
-      quantityPerAssembly: quantityMatch ? Number(quantityMatch[1]) : "",
-      quantityUnit: quantityUnitMatch ? quantityUnitMatch[1].toUpperCase() : "",
-      pageNumber: candidate.pageNumber,
-      confidence: candidate.confidence,
-      evidence: candidate.evidence
-    };
-  });
+  return mapPurchasedItemsToBomRows(analyzeDrawingPages(savedPages, tag).purchasedItems);
 }
 
 function normalizePart(value, fixtureTag) {
