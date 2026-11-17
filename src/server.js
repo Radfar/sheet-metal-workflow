@@ -386,23 +386,31 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       editAs: "oneCell"
     });
 
-    // Arrange BOM items into three shop-floor groups while preserving the
-    // SolidWorks order within each group: Angles, Channels, then Common Parts.
+    // Arrange BOM items into shop-floor groups while preserving the
+    // SolidWorks order within each group:
+    // Channels, Angles, Splices, End Caps, Common Parts, then Gussets.
+    // Gusset detection has highest priority because its standardized description
+    // contains "Chn'l" but Gussets must never be classified as Channels.
     // A null entry represents the intentionally blank separator row.
     const classifyBomGroup = component => {
       const source = [component.partNumber, component.description, component.componentType]
         .filter(Boolean).join(" ").toUpperCase();
-      if (/SHORT[\s_-]*ANG|\bANGLE\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(source)) return "angles";
+      if (/GUSSET|\bGUS\b/i.test(source)) return "gussets";
+      if (/SPLICE|SPLICE-PLT/i.test(source)) return "splices";
+      if (/END[\s_-]*CAP|\bENDCAP\b/i.test(source)) return "endCaps";
       if (/\bCHANNEL\b|\bCHN['’]?L\b|\bTROUGH\b/i.test(source)) return "channels";
+      if (/SHORT[\s_-]*ANG|\bANGLE\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(source)) return "angles";
       return "common";
     };
-    const groupedComponents = {
-      angles: components.filter(component => classifyBomGroup(component) === "angles"),
-      channels: components.filter(component => classifyBomGroup(component) === "channels"),
-      common: components.filter(component => classifyBomGroup(component) === "common")
-    };
+    const groupOrder = ["channels", "angles", "splices", "endCaps", "common", "gussets"];
+    const groupedComponents = Object.fromEntries(
+      groupOrder.map(group => [
+        group,
+        components.filter(component => classifyBomGroup(component) === group)
+      ])
+    );
     const bomRows = [];
-    ["angles", "channels", "common"].forEach(group => {
+    groupOrder.forEach(group => {
       if (!groupedComponents[group].length) return;
       if (bomRows.length) bomRows.push(null);
       bomRows.push(...groupedComponents[group]);
