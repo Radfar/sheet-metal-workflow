@@ -99,12 +99,31 @@ The following component description patterns are implemented in the Shop-Standar
 | End cap | Flat-pattern dimensions + gauge + `Plt.` + `(Laser)` + quoted part number | `7 11/16" x 9" 16GA. Plt. (Laser) "ENDCAP"` |
 | Plate splice | Plate dimensions + gauge + `Plt.` + `(Laser)` + quoted part number | `2" x 8" 16GA. Plt. (Laser) "SPLICE-PLT-2"` |
 | Gusset | Dimensions + gauge + `Chn'l` + `(Laser/SM)` + gusset description + quoted part number | `1 3/4" x 8 13/16" x 1 3/4" 16GA. Chn'l (Laser/SM) Return Gusset "GUS"` |
-| Short angle | Dimensions + gauge + `(Laser/SM)` + quoted part number | `11 3/4" x 2 3/16" 11GA. (Laser/SM) "SHORT-ANG"` |
-| Angle | Dimensions + gauge + `Angle` + length; process marker may be appended | `1" x 1 3/8" 11GA. Angle x 78 7/8"` |
+| Angle / ANG / Short angle | Standard profile + gauge + `Angle x [overall length]` + `(Laser/SM)` + quoted part number when the second source dimension is `2 3/16"` or `2.18"` | `1" x 1 3/8" 11GA. Angle x 92 5/8" (Laser/SM) "T01A-ANG-1"` |
 | Fixture channel (approved profile) | Fixed profile + gauge + `Chn'l` + overall length + process + one-piece suffix | `7 11/16" X 9" x 7 11/16" 16GA. Chn'l x 91 3/16" (Laser/SM) "T01A-A" (Made in 1pcs.) (0/0)` |
 | Ordinary channel | Dimensions + gauge + `Chn'l` + length, where available | `2" x 1" 16GA. Chn'l x 90"` |
 | Purchased hardware | Hardware size + hardware type + length | `#8 RH Tek Screw x 1/2"` |
 
+### Angle / ANG / Short Angle standard profile
+
+Apply this rule to components identified as **Angle**, **ANG**, or **Short Angle**, including identities indicated by the part number (for example, `T01A-ANG-1` or `SHORT-ANG`), when the second source dimension is exactly `2 3/16"` or `2.18"`.
+
+For qualifying parts:
+
+- Treat the first source dimension as the overall angle length.
+- Replace the cross-section dimensions with the standard profile `1" x 1 3/8"`.
+- Retain the verified gauge.
+- Use the component designation `Angle`, including for Short Angle parts.
+- Format the description as `1" x 1 3/8" [Gauge] Angle x [overall length] (Laser/SM)`.
+- Append the exact quoted part number at the end in the Excel Shop BOM; make it bold.
+
+Approved example:
+
+```text
+1" x 1 3/8" 11GA. Angle x 92 5/8" (Laser/SM) "T01A-ANG-1"
+```
+
+The same standard profile replacement applies when the source cross-section is written as `2.18"` instead of `2 3/16"`. Do not apply this replacement to unrelated dimensions or to non-angle components. When an angle does not have either approved second-dimension value, retain its applicable existing description formatting.
 ### Fixture-channel special format
 
 Apply this rule only when all of the following conditions are met:

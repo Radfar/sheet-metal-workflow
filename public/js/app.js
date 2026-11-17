@@ -334,14 +334,14 @@ function buildShopStandardExportDescription(component) {
       const fixedProfile = '7 11/16" X 9" x 7 11/16"';
       description = [fixedProfile, gauge, "Chn'l", "x " + overallLength,
         "(Laser/SM)", "(Made in 1pcs.)", "(0/0)"].filter(Boolean).join(" ");
-    } else if (isEndcap || isGusset || isShortAngle || isTroughSection) {
+    } else if (isEndcap || isGusset || isTroughSection) {
       let name = identity;
       if (isEndcap) {
         name = name.replace(/\s+ENDCAP\s*$/i, "").replace(/\s+/g, " ").trim();
       } else if (isGusset) {
         name = name.replace(/\s+REMOVABLE[-_ ]GUSSET\s*$/i, "")
           .replace(/\bReturn\s+gusset\b/gi, "Gusset").replace(/\s+/g, " ").trim();
-      } else if (isShortAngle || isTroughSection) {
+      } else if (isTroughSection) {
         // The component type is already represented by the BOM category.
         // Do not repeat it immediately before the quoted part number.
         // The SolidWorks part number is appended separately in bold by the
@@ -369,22 +369,36 @@ function buildShopStandardExportDescription(component) {
       }
     } else {
       const sourceIdentity = description + " " + identity + " " + partNumber;
-      const isAngle = /\bAngle\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(sourceIdentity);
+      const isAngle = /\bAngle\b|\bANG\b|[-_]ANG(?:[-_\d]|$)|SHORT[\s_-]*ANG/i.test(sourceIdentity);
       const isChannel = /\bChn'l\b/i.test(sourceIdentity);
-      const isT01AAngle = /^T01A-ANG-[123]$/i.test(partNumber);
       if (isAngle) {
-        description = description.replace(/\bFlat pattern\b/gi, "")
-          .replace(/\bAngle\b/gi, "").replace(/\bANG\b(?![-_]\d)/gi, "")
-          .replace(/\s+/g, " ").trim();
-        const gaugeMatch = description.match(/\b\d+GA\./i);
-        if (gaugeMatch) {
-          const gauge = gaugeMatch[0];
-          description = description.replace(gauge, gauge + " Angle");
-        }
-        if (isT01AAngle) {
-          description = description + " (Laser/SM)";
+        // Angle stock uses a standard 1 in x 1 3/8 in profile whenever
+        // the source cross-section is recorded as 2 3/16 in or 2.18 in.
+        // The first dimension is the overall angle length.
+        const angleDimensions = description.match(
+          /(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)["″]?\s*[x×]\s*(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)["″]?/i
+        );
+        const secondAngleDimension = angleDimensions?.[2]?.replace(/\s+/g, " ").trim();
+        const hasStandardAngleCrossSection =
+          secondAngleDimension === "2 3/16" || secondAngleDimension === "2.18";
+
+        if (hasStandardAngleCrossSection) {
+          const overallLength = formatShopDimension(angleDimensions[1]);
+          const gauge = description.match(/\b\d+GA\./i)?.[0] || "";
+          description = ['1" x 1 3/8"', gauge, "Angle", "x " + overallLength, "(Laser/SM)"]
+            .filter(Boolean).join(" ");
         } else {
-          const angleIdentity = identity.replace(/^\s*Angle\s*/i, "").trim();
+          // Preserve the existing generic angle treatment when the source
+          // cross-section does not match the approved standard profile rule.
+          description = description.replace(/\bFlat pattern\b/gi, "")
+            .replace(/\bAngle\b/gi, "").replace(/\bANG\b(?![-_]\d)/gi, "")
+            .replace(/\s+/g, " ").trim();
+          const gaugeMatch = description.match(/\b\d+GA\./i);
+          if (gaugeMatch) {
+            const gauge = gaugeMatch[0];
+            description = description.replace(gauge, gauge + " Angle");
+          }
+          const angleIdentity = identity.replace(/^\s*(?:Short\s+)?Angle\s*/i, "").trim();
           if (angleIdentity) description = [description, angleIdentity].filter(Boolean).join(" ");
         }
       } else if (isChannel) {
