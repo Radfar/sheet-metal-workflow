@@ -308,7 +308,7 @@ function buildShopStandardExportDescription(component) {
     description = description.replace(partNumber, "").replace(/\s+/g, " ").trim();
     const gauge = description.match(/\b(?:16|11)GA\./i)?.[0] || "";
     const dimensions = gauge ? description.replace(gauge, "").trim() : description;
-    description = [dimensions, gauge, "Plt.", "(Laser)", "Splice"].filter(Boolean).join(" ");
+    description = [dimensions, gauge, "Plt.", "(Laser)"].filter(Boolean).join(" ");
   } else {
     const identitySource = identity + " " + partNumber;
     const isEndcap = /END[\s_-]*CAP|ENDCAP/i.test(identitySource);
@@ -329,15 +329,12 @@ function buildShopStandardExportDescription(component) {
       } else if (isGusset) {
         name = name.replace(/\s+REMOVABLE[-_ ]GUSSET\s*$/i, "")
           .replace(/\bReturn\s+gusset\b/gi, "Gusset").replace(/\s+/g, " ").trim();
-      } else if (isShortAngle) {
-        // The shop name is only "Short Angle"; the SolidWorks part number is
-        // appended separately in bold by the Excel exporter.
-        name = "Short Angle";
-      } else if (isTroughSection) {
-        // The approved shop identity is always "Trough section".
+      } else if (isShortAngle || isTroughSection) {
+        // The component type is already represented by the BOM category.
+        // Do not repeat it immediately before the quoted part number.
         // The SolidWorks part number is appended separately in bold by the
-        // Excel exporter, so it must not be repeated in the description.
-        name = "Trough section";
+        // Excel exporter.
+        name = "";
       }
 
       description = description.replace(/\bFlat pattern\b/gi, "")
@@ -348,6 +345,8 @@ function buildShopStandardExportDescription(component) {
       const dimensions = gauge ? description.replace(gauge, "").trim() : description;
 
       if (isEndcap) {
+        // The component type "End cap" is redundant before the quoted part number.
+        name = "";
         description = [dimensions, gauge, "Plt.", "(Laser)", name].filter(Boolean).join(" ");
       } else if (isGusset) {
         description = [dimensions, gauge, "Chn'l", "(Laser/SM)", name].filter(Boolean).join(" ");
