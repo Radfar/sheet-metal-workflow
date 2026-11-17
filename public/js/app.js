@@ -1,6 +1,5 @@
 import { discoverProjectFixtureEntries } from "./project-folder.js";
 import { analyzeDrawingPages, mapPurchasedItemsToBomRows, calculateGussetQuantity } from "./pdf-analysis.js";
-import { auditDxfFiles } from "./dxf-audit.js";
 const $ = id => document.getElementById(id);
 
 let components = [];
@@ -9,7 +8,6 @@ let dxfFiles = [];
 let currentFixtureTag = "";
 let drawingText = "";
 let drawingPages = [];
-let dxfAudit = null;
 const fixtureData = {};
 let templateAssets = { stellarLogo: "", radioButton: "" };
 let selectedFixtureFolderEntries = null;
@@ -71,57 +69,6 @@ function clone(value) {
 }
 
 const PDF_ANALYSIS_LAST_SCHEDULE_ROW = 24;
-
-function renderDxfAudit() {
-  const rows = [];
-  const audits = schedule
-    .map(item => ({ tag: item.tag, audit: fixtureData[item.tag]?.dxfAudit }))
-    .filter(entry => entry.audit);
-
-  for (const entry of audits) {
-    const audit = entry.audit;
-    for (const file of audit.files) {
-      const checkText = file.checks.map(check =>
-        "<span class=\"dxf-check-" + check.status.toLowerCase() + "\">[" + esc(check.status) + "]</span> " + esc(check.message)
-      ).join("<br>");
-      rows.push(
-        "<tr><td>" + esc(entry.tag) + "</td>" +
-        "<td>" + esc(file.filename) + "</td>" +
-        "<td>" + esc(file.materialCode || "—") + "</td>" +
-        "<td>" + esc(file.flatWidth && file.flatHeight ? file.flatWidth + " × " + file.flatHeight : "—") + "</td>" +
-        "<td>" + esc(file.componentLabel || "—") + "</td>" +
-        "<td class=\"dxf-audit-result dxf-audit-" + file.overall.toLowerCase() + "\">" + esc(file.overall) + "</td>" +
-        "<td>" + checkText + "</td></tr>"
-      );
-    }
-
-    const scheduleChecks = audit.checks.map(check =>
-      "<div><strong>" + esc(check.filename) + "</strong>: " +
-      check.checks.map(item => "<span class=\"dxf-check-" + item.status.toLowerCase() + "\">[" + esc(item.status) + "]</span> " + esc(item.message)).join(" · ") +
-      "</div>"
-    ).join("");
-
-    rows.push(
-      "<tr class=\"dxf-audit-summary\"><td colspan=\"7\">" +
-      "<strong>" + esc(entry.tag) + " cross-check:</strong> " + scheduleChecks +
-      "</td></tr>"
-    );
-  }
-
-  const errorCount = audits.reduce((sum, entry) => sum + entry.audit.files.filter(file => file.overall === "ERROR").length, 0);
-  const reviewCount = audits.reduce((sum, entry) => sum + entry.audit.files.filter(file => file.overall === "REVIEW").length, 0);
-  const dxfCount = audits.reduce((sum, entry) => sum + entry.audit.files.length, 0);
-
-  $("dxfAuditStatus").textContent = audits.length
-    ? dxfCount + " DXF file(s) inspected across " + audits.length + " fixture(s). " +
-      errorCount + " error(s), " + reviewCount + " review item(s). " +
-      "The audit checks filename metadata, DXF text/geometry when readable, SolidWorks BOM association, PDF identity/dimensions, and PDF page-1 schedule quantity."
-    : "Import the project folder to inspect every discovered DXF against its PDF drawing, SolidWorks BOM and fixture schedule.";
-
-  $("dxfAuditRows").innerHTML = rows.length
-    ? rows.join("")
-    : '<tr><td colspan="7" class="empty">No DXF audit data available yet.</td></tr>';
-}
 
 function renderPdfAnalysis() {
   // PDF drawing analysis remains available internally for BOM/purchased-item extraction,
@@ -595,7 +542,6 @@ function saveCurrentFixture() {
     sourceFiles: clone(fixtureData[currentFixtureTag]?.sourceFiles || {}),
     drawingText: drawingText || fixtureData[currentFixtureTag]?.drawingText || "",
     drawingPages: clone(drawingPages.length ? drawingPages : (fixtureData[currentFixtureTag]?.drawingPages || [])),
-    dxfAudit: clone(dxfAudit || fixtureData[currentFixtureTag]?.dxfAudit || null),
     bomGenerated: Boolean(fixtureData[currentFixtureTag]?.bomGenerated),
     shopBomGenerated: Boolean(fixtureData[currentFixtureTag]?.shopBomGenerated),
     generatedAt: fixtureData[currentFixtureTag]?.generatedAt || "",
@@ -783,7 +729,6 @@ function loadFixture(tag) {
   components = saved ? clone(saved.components) : [];
   drawingText = saved?.drawingText || "";
   drawingPages = clone(saved?.drawingPages || []);
-  dxfAudit = clone(saved?.dxfAudit || null);
   $("dxfInput").value = saved?.dxfText || "";
   if ($("drawingTextPreview")) $("drawingTextPreview").value = drawingText;
   if ($("drawingTextDetails")) $("drawingTextDetails").hidden = !drawingText;
@@ -801,7 +746,6 @@ function loadFixture(tag) {
   $("scheduleStatus").className = "ok";
   render();
   renderPdfAnalysis();
-  renderDxfAudit();
 }
 
 
@@ -1202,8 +1146,6 @@ async function importFixtureFolder(folderTag, providedEntries) {
   };
   fixtureData[tag].drawingText = drawingText;
   fixtureData[tag].drawingPages = clone(drawingPages);
-  dxfAudit = await auditDxfFiles(dxfEntries, dxfFiles, drawingPages, tag, schedule.find(item => item.tag === tag), bomLines);
-  fixtureData[tag].dxfAudit = clone(dxfAudit);
   saveCurrentFixture();
   renderPdfAnalysis();
   $("bomStatus").textContent = bomResult.count + " BOM item(s) read from " + bomCandidates[0].path + ".";
@@ -1220,7 +1162,6 @@ async function importFixtureFolder(folderTag, providedEntries) {
   $("buildComponentTreeBtn").disabled = false;
   $("componentTreePanel").hidden = true;
   renderSummary();
-  renderDxfAudit();
   return {tag,bomCount:bomResult.count,dxfCount:dxfEntries.length,pdfPages:pdfResult.pageCount};
 }
 
