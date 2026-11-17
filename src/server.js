@@ -443,12 +443,16 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       });
     }
 
-    // Blank group separators are visual-only: they must not consume one of the
-    // 25 numbered BOM item slots or trigger an unnecessary second worksheet.
-    // The template has 25 physical item rows, so omit separator rows in the
-    // exported table and paginate only actual BOM items.
-    const printableBomRows = bomRows.filter(Boolean);
-    const pageCount = Math.ceil(printableBomRows.length / BOM_ROWS_PER_SHEET);
+    // Preserve classified-group separator rows whenever they do not create
+    // an additional printed page. If separators alone would push the BOM onto
+    // another page, compact them so the number of pages is driven by real items.
+    const actualBomItemCount = bomRows.filter(Boolean).length;
+    const minimumPageCount = Math.max(1, Math.ceil(actualBomItemCount / BOM_ROWS_PER_SHEET));
+    const rowsWithSeparatorsPageCount = Math.max(1, Math.ceil(bomRows.length / BOM_ROWS_PER_SHEET));
+    const printableBomRows = rowsWithSeparatorsPageCount > minimumPageCount
+      ? bomRows.filter(Boolean)
+      : bomRows;
+    const pageCount = Math.max(1, Math.ceil(printableBomRows.length / BOM_ROWS_PER_SHEET));
     const worksheets = [templateWorksheet];
     for (let page = 2; page <= pageCount; page++) {
       worksheets.push(cloneTemplateWorksheet(templateWorksheet, workbook, "BOM " + page));
@@ -460,7 +464,6 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
     const normalizedShipDate = /^\d{4}-\d{2}-\d{2}$/.test(String(shipDate))
       ? new Date(String(shipDate) + "T12:00:00")
       : null;
-    let nextBomItemNumber = 1;
 
     worksheets.forEach((worksheet, pageIndex) => {
       worksheet.getCell("C8").value = customerProject;
@@ -479,10 +482,17 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           worksheet.getCell(rowNumber, column).value = null;
         }
 
+        // The item-number column is a fixed 1–25 index on every worksheet.
+        // It is independent of whether this row contains an item or a blank separator.
+        const itemNumberCell = worksheet.getCell(rowNumber, 1);
+        itemNumberCell.value = String(index + 1);
+        itemNumberCell.font = { ...(itemNumberCell.font || {}), size: 10, bold: true };
+
         const component = printableBomRows[pageIndex * BOM_ROWS_PER_SHEET + index];
         if (!component) {
-          // Ensure the group separator is genuinely empty across the BOM table.
-          for (let column = 1; column <= 11; column++) {
+          // Preserve the intentional blank row between classified groups.
+          // Only the fixed item number remains visible in column A.
+          for (const column of [2, 10, 11]) {
             worksheet.getCell(rowNumber, column).value = null;
           }
           continue;
@@ -496,9 +506,6 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           throw new Error("Invalid BOM quantity for " + (component.partNumber || component.description || "an unnamed component") + ".");
         }
 
-        const itemNumberCell = worksheet.getCell(rowNumber, 1);
-        itemNumberCell.value = String(nextBomItemNumber++);
-        itemNumberCell.font = { ...(itemNumberCell.font || {}), size: 10, bold: true };
         const descriptionCell = worksheet.getCell(rowNumber, 2);
         // Normalize the data-row font size so the first item matches all
         // subsequent BOM items, without changing bold/italic/font family.
