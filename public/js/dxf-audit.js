@@ -117,7 +117,7 @@ function parsePdfDimensionToken(raw) {
   const value = String(raw || "").trim().replace(/″/g, '"');
   if (!value) return null;
 
-  const mixed = value.match(/^(\d+)(\s+)(\d+)\/\(\d+)$/);
+  const mixed = value.match(/^(\d+)\s+(\d+)\/(\d+)$/);
   if (mixed) {
     const denominator = Number(mixed[4]);
     if (!denominator) return null;
