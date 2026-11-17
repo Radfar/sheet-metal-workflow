@@ -585,12 +585,31 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
             ? '7 11/16" X 9" x 7 11/16" ' + channelGauge +
               " Chn'l x " + channelDimensionsMatch[1] + '" (Laser/SM)'
             : null;
-          const descriptionBody = standardChannelDescription ??
+          let descriptionBody = standardChannelDescription ??
             descriptionOverrides[partNumber] ??
             (suffixMatch ? description.slice(0, suffixMatch.index).trimEnd() : description);
           const isSplicePlate = partNumber === "SPLICE-PLT-2" ||
             partNumber === "SPLICE-PLT-3" ||
             partNumber === "SPLICE-PLT-T";
+          // Shop Standard splice plates always list the smaller plate dimension first.
+          // Apply this only to SPLICE-PLT-2/-3/-T and leave all other plate/component
+          // descriptions in their source order.
+          if (isSplicePlate) {
+            const spliceDimensionsMatch = descriptionBody.match(
+              /^(\\s*)(\\d+(?:\\s+\\d+\\/\\d+|\\.\\d+)?)"(\\s*[xX]\\s*)(\\d+(?:\\s+\\d+\\/\\d+|\\.\\d+)?)"/
+            );
+            if (spliceDimensionsMatch) {
+              const firstDimension = parseDimensionInches(spliceDimensionsMatch[2]);
+              const secondDimension = parseDimensionInches(spliceDimensionsMatch[4]);
+              if (firstDimension !== null && secondDimension !== null && firstDimension > secondDimension) {
+                descriptionBody = spliceDimensionsMatch[1] +
+                  spliceDimensionsMatch[4] + '"' +
+                  spliceDimensionsMatch[3] +
+                  spliceDimensionsMatch[2] + '"' +
+                  descriptionBody.slice(spliceDimensionsMatch[0].length);
+              }
+            }
+          }
           const isGusset = /GUSSET|\bGUS\b/i.test(partNumber) || /\bReturn Gusset\b/i.test(descriptionBody);
           if (descriptionBody && (isSplicePlate || descriptionBody.includes("(Laser/SM)") || descriptionBody.includes("(Laser)"))) {
             const laserMarker = descriptionBody.includes("(Laser/SM)") ? "(Laser/SM)" : "(Laser)";
