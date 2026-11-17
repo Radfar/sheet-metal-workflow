@@ -443,7 +443,12 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       });
     }
 
-    const pageCount = Math.ceil(bomRows.length / BOM_ROWS_PER_SHEET);
+    // Blank group separators are visual-only: they must not consume one of the
+    // 25 numbered BOM item slots or trigger an unnecessary second worksheet.
+    // The template has 25 physical item rows, so omit separator rows in the
+    // exported table and paginate only actual BOM items.
+    const printableBomRows = bomRows.filter(Boolean);
+    const pageCount = Math.ceil(printableBomRows.length / BOM_ROWS_PER_SHEET);
     const worksheets = [templateWorksheet];
     for (let page = 2; page <= pageCount; page++) {
       worksheets.push(cloneTemplateWorksheet(templateWorksheet, workbook, "BOM " + page));
@@ -474,7 +479,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           worksheet.getCell(rowNumber, column).value = null;
         }
 
-        const component = bomRows[pageIndex * BOM_ROWS_PER_SHEET + index];
+        const component = printableBomRows[pageIndex * BOM_ROWS_PER_SHEET + index];
         if (!component) {
           // Ensure the group separator is genuinely empty across the BOM table.
           for (let column = 1; column <= 11; column++) {
