@@ -122,3 +122,19 @@ footer{text-align:center;color:#9aa4ad;font-size:10px;padding:18px}
 .pdf-confidence-higher{font-weight:700;color:#28724d}
 .pdf-confidence-possible{font-weight:650;color:#8a6829}
 #pdfAnalysisStatus{margin:4px 0 10px}
+
+
+/* DXF ↔ PDF engineering audit */
+.dxf-audit-table{min-width:1450px}
+.dxf-audit-table td{vertical-align:top;line-height:1.45}
+.dxf-audit-table td:nth-child(2){min-width:260px}
+.dxf-audit-table td:nth-child(7){min-width:430px}
+.dxf-audit-result{font-weight:800}
+.dxf-audit-ok{color:#397a5d}
+.dxf-audit-review{color:#8a6829}
+.dxf-audit-error{color:#a33}
+.dxf-check-ok{color:#397a5d;font-weight:650}
+.dxf-check-warning{color:#8a6829;font-weight:650}
+.dxf-check-error{color:#a33;font-weight:750}
+.dxf-audit-summary td{background:#fafbfc;color:#526170;font-size:10px}
+.dxf-audit-summary div+div{margin-top:5px}
