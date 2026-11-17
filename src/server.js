@@ -529,14 +529,19 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           // Keep the suffix as a separate trailing segment so the export order is:
           // description + process + quoted part number + manufacturing suffix.
           const suffixMatch = description.match(/\s*(\(Made in \d+pcs\.\)\s*\([^)]*\))\s*$/i);
-          const manufacturingSuffix = suffixMatch ? suffixMatch[1] : "";
-          // SPLICE-PLT-T is a laser-cut plate, not a generic flat-pattern common part.
-          // Use its approved Shop BOM description and retain the quoted part number.
-          const descriptionBody = partNumber === "SPLICE-PLT-T"
-            ? '10 1/4" x 8" 16GA. Plt. (Laser)'
-            : suffixMatch
-              ? description.slice(0, suffixMatch.index).trimEnd()
-              : description;
+          const manufacturingSuffix = partNumber === "T08-F2"
+            ? "(Made in 1pcs.) (0/0)"
+            : suffixMatch ? suffixMatch[1] : "";
+          // Exact Shop BOM descriptions for approved fixture-specific exceptions.
+          // These overrides change only the named part numbers.
+          const descriptionOverrides = {
+            "SPLICE-PLT-T": '10 1/4" x 8" 16GA. Plt. (Laser)',
+            "MILLWORK-ENDCAP": '7 11/16" x 9" 16GA. Plt. (Laser)',
+            "T08-F2": '7 11/16" X 9" x 7 11/16" 16GA. Chn\'l x 86 1/2" (Laser/SM)',
+            "ANGLE-CONNECTION": '1 3/8" x 1 3/8" 16GA. Angle x 5 3/4" (Laser/SM)'
+          };
+          const descriptionBody = descriptionOverrides[partNumber] ??
+            (suffixMatch ? description.slice(0, suffixMatch.index).trimEnd() : description);
           const isSplicePlate = partNumber === "SPLICE-PLT-2" ||
             partNumber === "SPLICE-PLT-3" ||
             partNumber === "SPLICE-PLT-T";
@@ -560,7 +565,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           // intentionally replaces the SolidWorks part number in the Shop BOM.
           if (!isGusset) {
             richText.push({
-              text: '"' + partNumber + '"',
+              text: (partNumber === "ANGLE-CONNECTION" ? " " : "") + '"' + partNumber + '"',
               font: { ...baseFont, bold: true }
             });
           }
