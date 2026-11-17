@@ -1,10 +1,10 @@
-const NUMBER_PATTERN = /\\d+(?:\\.\\d+)?/g;
+const NUMBER_PATTERN = /\d+(?:\.\d+)?/g;
 
 function normalize(value) {
   return String(value ?? "")
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, " ")
-    .replace(/\\s+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -15,7 +15,7 @@ function numbersClose(a, b, tolerance = 0.02) {
 }
 
 function parseAsciiDxf(text) {
-  const lines = String(text || "").replace(/\\r/g, "").split("\\n");
+  const lines = String(text || "").replace(/\r/g, "").split("\n");
   const entities = [];
   let section = "";
   let current = null;
@@ -145,7 +145,7 @@ function makeCheck(status, message) {
 }
 
 export async function auditDxfFiles(dxfEntries, dxfMetadata, pdfPages, fixtureTag, scheduleItem, bomComponents) {
-  const pdfText = (pdfPages || []).map(page => String(page.text || "")).join("\\n");
+  const pdfText = (pdfPages || []).map(page => String(page.text || "")).join("\n");
   const page1 = (pdfPages || []).find(page => Number(page.pageNumber) === 1)?.text || "";
   const checks = [];
   const files = [];
@@ -230,7 +230,7 @@ export async function auditDxfFiles(dxfEntries, dxfMetadata, pdfPages, fixtureTa
 
   const pdfFixtureMatch = normalize(page1).includes(normalize(fixtureTag));
   const pdfQuantityMatch = scheduleItem
-    ? new RegExp("\\b(?:QTY|QUANTITY)\\.?\\s*[:=#-]?\\s*" + String(scheduleItem.qty) + "\\b", "i").test(page1)
+    ? new RegExp("\b(?:QTY|QUANTITY)\.?\s*[:=#-]?\s*" + String(scheduleItem.qty) + "\b", "i").test(page1)
     : false;
 
   checks.push({
