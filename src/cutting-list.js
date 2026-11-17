@@ -251,7 +251,10 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
     // Any section below the inserted rows must move with the expanded section.
     for (const [key, other] of Object.entries(sectionRows)) {
-      if (key !== sectionKey && other.headingRow > insertAt) {
+      // The following section starts exactly at insertAt, so it must move too.
+      // Using > here leaves its heading/data indices behind while ExcelJS shifts
+      // the actual worksheet rows, causing the two material sections to overlap.
+      if (key !== sectionKey && other.headingRow >= insertAt) {
         other.headingRow += extraRows;
         other.firstRow += extraRows;
         other.lastRow += extraRows;
