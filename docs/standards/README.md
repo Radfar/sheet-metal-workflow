@@ -101,8 +101,36 @@ The following component description patterns are implemented in the Shop-Standar
 | Gusset | Dimensions + gauge + `Chn'l` + `(Laser/SM)` + gusset description + quoted part number | `1 3/4" x 8 13/16" x 1 3/4" 16GA. Chn'l (Laser/SM) Return Gusset "GUS"` |
 | Short angle | Dimensions + gauge + `(Laser/SM)` + quoted part number | `11 3/4" x 2 3/16" 11GA. (Laser/SM) "SHORT-ANG"` |
 | Angle | Dimensions + gauge + `Angle` + length; process marker may be appended | `1" x 1 3/8" 11GA. Angle x 78 7/8"` |
-| Channel | Dimensions + gauge + `Chn'l` + length, where available | `2" x 1" 16GA. Chn'l x 90"` |
+| Fixture channel (approved profile) | Fixed profile + gauge + `Chn'l` + overall length + process + one-piece suffix | `7 11/16" X 9" x 7 11/16" 16GA. Chn'l x 91 3/16" (Laser/SM) "T01A-A" (Made in 1pcs.) (0/0)` |
+| Ordinary channel | Dimensions + gauge + `Chn'l` + length, where available | `2" x 1" 16GA. Chn'l x 90"` |
 | Purchased hardware | Hardware size + hardware type + length | `#8 RH Tek Screw x 1/2"` |
+
+### Fixture-channel special format
+
+Apply this rule only when all of the following conditions are met:
+
+1. The part number follows the fixture-channel pattern: fixture tag + hyphen + one letter identifier (for example, `T01A-A`, `T01A-B`, or `T01A-C`).
+2. The component is identified as a channel in the source description.
+3. The second cross-section dimension is exactly `24 3/16"`.
+
+For qualifying parts:
+
+- Treat the first cross-section dimension as the overall channel length.
+- Replace the original cross-section dimensions with the fixed profile `7 11/16" X 9" x 7 11/16"`.
+- Retain the verified gauge.
+- Use `Chn'l x [overall length]`.
+- Use the process marker `(Laser/SM)`.
+- For the current approved default, append `(Made in 1pcs.) (0/0)`.
+
+Example:
+
+```text
+7 11/16" X 9" x 7 11/16" 16GA. Chn'l x 91 3/16" (Laser/SM) "T01A-A" (Made in 1pcs.) (0/0)
+```
+
+The one-piece suffix is the approved default for the current project. If a future drawing identifies a channel manufactured in two pieces, retrieve both individual lengths explicitly from the SolidWorks drawing and verify that their sum equals the overall channel length before changing the suffix. Do not assume equal piece lengths or infer them from the overall length. Two-piece formatting is not yet an approved automatic rule.
+
+Channels outside this fixture-part pattern, or with a second cross-section dimension other than `24 3/16"`, retain the ordinary channel formatting.
 
 ### General description formatting
 
