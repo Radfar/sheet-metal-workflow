@@ -4,7 +4,7 @@ import { analyzeDrawingPages } from "../public/js/pdf-analysis.js";
 
 test("finds purchased hardware and retains its source page", () => {
   const result = analyzeDrawingPages([
-    { pageNumber: 1, text: "T01A FIXTURE QTY: 2\\n#8 RH Tek Screw x 1/2\\"" },
+    { pageNumber: 1, text: "T01A FIXTURE QTY: 2\n#8 RH Tek Screw x 1/2\"" },
     { pageNumber: 2, text: "Channel profile 7 11/16 x 9" },
     { pageNumber: 3, text: "Channel section" },
     { pageNumber: 4, text: "Angle 1 x 1 3/8" },
