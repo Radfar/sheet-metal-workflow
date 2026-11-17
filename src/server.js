@@ -455,6 +455,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
     const normalizedShipDate = /^\d{4}-\d{2}-\d{2}$/.test(String(shipDate))
       ? new Date(String(shipDate) + "T12:00:00")
       : null;
+    let nextBomItemNumber = 1;
 
     worksheets.forEach((worksheet, pageIndex) => {
       worksheet.getCell("C8").value = customerProject;
@@ -490,8 +491,9 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           throw new Error("Invalid BOM quantity for " + (component.partNumber || component.description || "an unnamed component") + ".");
         }
 
-        worksheet.getCell(rowNumber, 1).value =
-          component.itemNo || String(pageIndex * BOM_ROWS_PER_SHEET + index + 1);
+        const itemNumberCell = worksheet.getCell(rowNumber, 1);
+        itemNumberCell.value = String(nextBomItemNumber++);
+        itemNumberCell.font = { ...(itemNumberCell.font || {}), size: 10, bold: true };
         const descriptionCell = worksheet.getCell(rowNumber, 2);
         // Normalize the data-row font size so the first item matches all
         // subsequent BOM items, without changing bold/italic/font family.
