@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyzeDrawingPages, mapPurchasedItemsToBomRows } from "../public/js/pdf-analysis.js";
+import { analyzeDrawingPages, mapPurchasedItemsToBomRows, calculateGussetQuantity } from "../public/js/pdf-analysis.js";
 
 test("finds purchased hardware and retains its source page", () => {
   const result = analyzeDrawingPages([
@@ -139,4 +139,16 @@ test("uses zero screw quantity when no gussets are listed in the fixture BOM", (
   ], 0);
 
   assert.equal(rows[0].quantityPerAssembly, 0);
+});
+
+
+test("sums only SolidWorks BOM quantities for Gusset components", () => {
+  const quantity = calculateGussetQuantity([
+    { partNumber: "T01A-GUS-1", quantityPerAssembly: 2 },
+    { description: "Return Gusset", quantityPerAssembly: "3" },
+    { partNumber: "T01A-ANG-1", description: "Angle", quantityPerAssembly: 5 },
+    { partNumber: "T01A-GUS-2", quantityPerAssembly: "" }
+  ]);
+
+  assert.equal(quantity, 5);
 });
