@@ -135,17 +135,20 @@ Current limitation: project, fixture BOMs, generated-status flags and selected l
 - The exported filename follows `{Laser order number} {order date}-{ship date}.xlsx`; dates in the same month are compacted (for example, `RA-5075 Jul 02-26.xlsx`).
 
 
-## PDF drawing analysis trial (T01A through T07)
+## PDF drawing analysis trial (T01A through T14)
 
-The project workspace includes a PDF analysis review panel for the first 14 schedule entries, from T01A through T07.
+The project workspace includes a browser-based PDF analysis review panel for schedule entries 1–24, covering T01A through T14.
 
-- PDF text extraction remains client-side in the browser. The PDF files are not uploaded to the Node.js server.
-- Extracted text is retained page by page, with line breaks reconstructed from PDF text positions where available.
-- The page-check table reports what was detected on page 1 (fixture reference and quantity), pages 2–3 (channel/trough keywords), and page 4 (angle keywords). These are validation indicators, not a substitute for checking the drawing.
-- Purchased-item candidates are searched across every extracted page, not only pages 1 and 6. The initial vocabulary includes screws, Tek screws, bolts, nuts, washers, rivets, anchors, fasteners, dowels, pins, clips, connectors, hinges, magnets, grommets and inserts.
+- PDF text extraction remains client-side in the browser. PDF files are not uploaded to the Node.js server.
+- The analysis scope includes the schedule entries through T14. T15 and T16 are intentionally held out pending engineering review; T17 is excluded.
+- For T01A–T07 drawings, the page checks follow the observed layout: page 1 fixture data/quantity, pages 2–3 channel data, page 4 angle data, and page 6 as an additional purchased-item reference page observed in the review.
+- For T08–T14 drawings, the page checks follow the observed layout: page 1 fixture data/quantity, pages 3–5 channel data, page 6 end-cap data, page 7 angle data, and pages 2 and 11 as hardware-reference pages.
+- These page roles are validation guides based on the reviewed drawings, not rigid extraction boundaries. Purchased-item candidates are searched across every extracted page.
+- The purchased-item parser has explicit patterns for `10-32 RHMS x 1/2" C/W HEX NYLOK NUT` and `#8 RH TEK SCREWS x 1/2"`, plus a conservative generic hardware fallback.
+- An adjacent explicit quantity such as `40 SETS` can be associated with a candidate when it appears in the same or immediately neighboring extracted text lines. The app does not calculate or infer missing quantities.
 - Each candidate retains its fixture tag, PDF page number, extracted description, source text evidence, and any explicitly detected quantity.
 - "Higher" means a recognized hardware term was accompanied by a size-like token; "Possible" means a hardware term was found without a size-like token. These are heuristic labels, not calibrated confidence scores.
-- The analysis does not infer a missing quantity, part number, unit, or purchasing status. It does not append candidates to the BOM. Engineering review is required before a later BOM-integration step.
+- The analysis does not infer a missing part number, unit, or purchasing status. It does not append candidates to the BOM. Engineering review is required before a later BOM-integration step.
 - Image-only/scanned PDFs still require OCR; this trial does not perform OCR.
 
-This trial is intended to measure extraction quality on the actual T01A–T07 drawings before any purchased-item candidates are allowed into the Shop-Standard BOM.
+This trial measures extraction quality on the T01A–T14 drawings before purchased-item candidates are allowed into the Shop-Standard BOM.
