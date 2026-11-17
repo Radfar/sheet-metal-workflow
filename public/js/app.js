@@ -1435,7 +1435,7 @@ async function generateProjectBatch(savePickerResult) {
     renderSummary();
     $("projectBatchStatus").textContent =
       "Shop-format batch export: " + files.length + " workbook(s) packaged into " + zipName +
-      (failed.length ? ". Failed: " + failed.join(" | ") : ". Choose the ZIP save location once.");
+      (failed.length ? ". Failed: " + failed.join(" | ") : (pickerResult?.handle ? ". ZIP saved to the selected location." : ". Browser ZIP download started."));
     $("projectBatchStatus").className = failed.length ? "status-text" : "ok";
   } catch (error) {
     $("projectBatchStatus").textContent = error.name === "AbortError"
