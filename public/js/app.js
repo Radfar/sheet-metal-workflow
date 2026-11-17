@@ -1,4 +1,5 @@
 import { discoverProjectFixtureEntries } from "./project-folder.js";
+import { analyzeDrawingPages } from "./pdf-analysis.js";
 const $ = id => document.getElementById(id);
 
 let components = [];
@@ -6,6 +7,7 @@ let bomLines = [];
 let dxfFiles = [];
 let currentFixtureTag = "";
 let drawingText = "";
+let drawingPages = [];
 const fixtureData = {};
 let templateAssets = { stellarLogo: "", radioButton: "" };
 let selectedFixtureFolderEntries = null;
@@ -62,6 +64,53 @@ const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+const PDF_ANALYSIS_LAST_SCHEDULE_ROW = 14;
+
+function renderPdfAnalysis() {
+  const scopedSchedule = schedule.slice(0, PDF_ANALYSIS_LAST_SCHEDULE_ROW);
+  const imported = scopedSchedule.filter(item => Array.isArray(fixtureData[item.tag]?.drawingPages));
+  const pageRows = [];
+  const candidateRows = [];
+
+  for (const item of scopedSchedule) {
+    const savedPages = fixtureData[item.tag]?.drawingPages || [];
+    if (!savedPages.length) continue;
+    const analysis = analyzeDrawingPages(savedPages, item.tag);
+    const checks = new Map(analysis.pageChecks.map(check => [check.pageNumber, check.result]));
+    pageRows.push(
+      "<tr><td>" + esc(item.tag) + "</td>" +
+      "<td>" + esc(checks.get(1) || "Not available") + "</td>" +
+      "<td>" + esc(checks.get(2) || "Not available") + "</td>" +
+      "<td>" + esc(checks.get(3) || "Not available") + "</td>" +
+      "<td>" + esc(checks.get(4) || "Not available") + "</td>" +
+      "<td>" + savedPages.length + "</td></tr>"
+    );
+
+    for (const candidate of analysis.purchasedItems) {
+      candidateRows.push(
+        "<tr><td>" + esc(candidate.fixtureTag) + "</td>" +
+        "<td>" + esc(candidate.pageNumber) + "</td>" +
+        "<td>" + esc(candidate.description) + "</td>" +
+        "<td>" + esc(candidate.quantity || "Not detected") + "</td>" +
+        '<td class="' + (candidate.confidence === "Higher" ? "pdf-confidence-higher" : "pdf-confidence-possible") + '">' +
+        esc(candidate.confidence) + "</td>" +
+        "<td>" + esc(candidate.evidence) + "</td></tr>"
+      );
+    }
+  }
+
+  $("pdfAnalysisStatus").textContent = imported.length
+    ? imported.length + " of " + scopedSchedule.length + " fixtures in scope (T01A through T07) have page text. " +
+      candidateRows.length + " possible purchased-item reference(s) found. All candidates require manual verification; none are added to the BOM."
+    : "Import the project folder to analyze drawing PDFs for T01A through T07.";
+  $("pdfPageCheckRows").innerHTML = pageRows.length
+    ? pageRows.join("")
+    : '<tr><td colspan="6" class="empty">No PDF page data available for T01A through T07.</td></tr>';
+  $("pdfPurchasedRows").innerHTML = candidateRows.length
+    ? candidateRows.join("")
+    : '<tr><td colspan="6" class="empty">No purchased-item candidates detected yet. This does not prove that the drawings contain no purchased items.</td></tr>';
 }
 
 function normalizePart(value, fixtureTag) {
@@ -518,6 +567,7 @@ function saveCurrentFixture() {
     bomFilenameDescription: $("bomFilenameDescription").value,
     sourceFiles: clone(fixtureData[currentFixtureTag]?.sourceFiles || {}),
     drawingText: drawingText || fixtureData[currentFixtureTag]?.drawingText || "",
+    drawingPages: clone(drawingPages.length ? drawingPages : (fixtureData[currentFixtureTag]?.drawingPages || [])),
     bomGenerated: Boolean(fixtureData[currentFixtureTag]?.bomGenerated),
     shopBomGenerated: Boolean(fixtureData[currentFixtureTag]?.shopBomGenerated),
     generatedAt: fixtureData[currentFixtureTag]?.generatedAt || "",
@@ -688,6 +738,7 @@ function loadFixture(tag) {
   dxfFiles = saved ? clone(saved.dxfFiles) : [];
   components = saved ? clone(saved.components) : [];
   drawingText = saved?.drawingText || "";
+  drawingPages = clone(saved?.drawingPages || []);
   $("dxfInput").value = saved?.dxfText || "";
   if ($("drawingTextPreview")) $("drawingTextPreview").value = drawingText;
   if ($("drawingTextDetails")) $("drawingTextDetails").hidden = !drawingText;
@@ -704,6 +755,7 @@ function loadFixture(tag) {
   $("scheduleStatus").textContent = item.tag + " loaded. Its BOM data is kept separately from other fixtures.";
   $("scheduleStatus").className = "ok";
   render();
+  renderPdfAnalysis();
 }
 
 
@@ -958,14 +1010,43 @@ async function extractDrawingPdfText(pdfFile) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
   const bytes = new Uint8Array(await pdfFile.arrayBuffer());
   const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+  const pages = [];
   let text = "";
+
   for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
     const page = await pdf.getPage(pageNo);
     const content = await page.getTextContent();
-    const pageText = content.items.map(item => item.str || "").join(" ");
+    const positionedItems = content.items
+      .filter(item => item.str && item.str.trim())
+      .map((item, index) => ({
+        text: item.str.trim(),
+        x: Number(item.transform?.[4]),
+        y: Number(item.transform?.[5]),
+        index
+      }));
+
+    let pageText = "";
+    if (positionedItems.some(item => Number.isFinite(item.x) && Number.isFinite(item.y))) {
+      const lines = new Map();
+      for (const item of positionedItems) {
+        const key = Number.isFinite(item.y) ? String(Math.round(item.y * 2) / 2) : "unpositioned";
+        if (!lines.has(key)) lines.set(key, []);
+        lines.get(key).push(item);
+      }
+      pageText = [...lines.entries()]
+        .sort((a, b) => a[0] === "unpositioned" ? 1 : b[0] === "unpositioned" ? -1 : Number(b[0]) - Number(a[0]))
+        .map(([, items]) => items.sort((a, b) =>
+          (Number.isFinite(a.x) ? a.x : a.index) - (Number.isFinite(b.x) ? b.x : b.index)
+        ).map(item => item.text).join(" "))
+        .join("\n");
+    } else {
+      pageText = positionedItems.map(item => item.text).join(" ");
+    }
+
+    pages.push({ pageNumber: pageNo, text: pageText });
     text += "\n\n--- PAGE " + pageNo + " ---\n" + pageText;
   }
-  return { text: text.trim(), pageCount: pdf.numPages };
+  return { text: text.trim(), pageCount: pdf.numPages, pages };
 }
 
 async function readSelectedDirectory(handle) {
@@ -1049,7 +1130,7 @@ async function importFixtureFolder(folderTag, providedEntries) {
   });
   const dxfResult = await dxfResponse.json();
   if (!dxfResponse.ok) throw new Error(dxfResult.error || "DXF filename parsing failed.");
-  let pdfResult = {text:"",pageCount:0};
+  let pdfResult = {text:"",pageCount:0,pages:[]};
   try { pdfResult = await extractDrawingPdfText(pdfCandidates[0].file); }
   catch (error) { console.warn("PDF text extraction unavailable for " + tag, error); }
   loadFixture(tag);
@@ -1059,6 +1140,7 @@ async function importFixtureFolder(folderTag, providedEntries) {
   bomLines = bomResult.components.map(line => ({...line,descriptionOrigin:"solidworks",descriptionDraft:true,manual:false}));
   dxfFiles = dxfResult.components.map((component,index) => ({...component,sha256:dxfHashes[index] || ""}));
   drawingText = pdfResult.text;
+  drawingPages = clone(pdfResult.pages || []);
   $("dxfInput").value = dxfNames.join("\n");
   rebuildComponents();
   fixtureData[tag].bomGenerated = false;
@@ -1073,7 +1155,9 @@ async function importFixtureFolder(folderTag, providedEntries) {
     dxfFilenames:dxfEntries.map(entry => entry.path)
   };
   fixtureData[tag].drawingText = drawingText;
+  fixtureData[tag].drawingPages = clone(drawingPages);
   saveCurrentFixture();
+  renderPdfAnalysis();
   $("bomStatus").textContent = bomResult.count + " BOM item(s) read from " + bomCandidates[0].path + ".";
   $("bomStatus").className = "ok";
   $("parseStatus").textContent = dxfFiles.length + " DXF filename(s) read from " + tag + ". DXF contents were not uploaded.";
@@ -1695,5 +1779,6 @@ if (logoutButton) {
 
 renderScheduleEditor();
 renderFixtureOptions();
+renderPdfAnalysis();
 $("fixtureSelect").value = schedule[0]?.tag || "";
 loadFixture($("fixtureSelect").value);
