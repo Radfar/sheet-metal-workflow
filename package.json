@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test && node --check public/js/app.js && node --check public/js/project-folder.js"
+    "test": "node --test && node --check src/server.js && node --check public/js/app.js && node --check public/js/pdf-analysis.js && node --check public/js/project-folder.js"
   },
   "engines": {
     "node": ">=20"
