@@ -199,7 +199,6 @@ export function mapPurchasedItemsToBomRows(purchasedItems, gussetQuantity = 0) {
         : sourceDescription;
     const quantityText = String(candidate.quantity || "");
     const quantityMatch = quantityText.match(/(?:^|\bQTY\.?\s*[:=#-]?\s*)(\d+(?:\.\d+)?)/i);
-    const isEightRhTekScrew = /^#\s*8\s+RH\s+TEK\s+SCREWS?\s*x\s*1\s*\/\s*2\b/i.test(sourceDescription);
     return {
       itemNo: "P" + (index + 1),
       purchasedItem: true,
