@@ -96,7 +96,7 @@ test("keeps a hardware candidate as possible when no size is stated", () => {
 });
 
 
-test("maps detected SETS quantities and units into purchased BOM rows", () => {
+test("standardizes the Nylok nut description and maps SETS as a plain numeric quantity", () => {
   const rows = mapPurchasedItemsToBomRows([
     { description: "10-32 RHMS x 1/2 inch C/W HEX NYLOK NUT", quantity: "40 SETS", pageNumber: 2 },
     { description: "#8 RH TEK SCREWS x 1/2 inch", quantity: "QTY: 12", pageNumber: 11 },
@@ -105,9 +105,10 @@ test("maps detected SETS quantities and units into purchased BOM rows", () => {
 
   assert.deepEqual(rows.map(row => row.itemNo), ["P1", "P2", "P3"]);
   assert.deepEqual(rows.map(row => row.quantityPerAssembly), [40, 12, ""]);
-  assert.deepEqual(rows.map(row => row.quantityUnit), ["SETS", "", ""]);
+  assert.equal(rows[0].description, "10-32 HEX NYLOCK NUT (PAINT TO MATCH)");
   assert.ok(rows.every(row => row.purchasedItem));
   assert.equal(rows[2].description, "Tek Screw");
+  assert.ok(rows.every(row => !Object.hasOwn(row, "quantityUnit")));
 });
 
 test("omits empty purchased-item descriptions rather than creating blank BOM items", () => {
@@ -130,7 +131,8 @@ test("sets #8 RH TEK SCREW quantity to three times the fixture gusset quantity",
 
   assert.equal(rows[0].quantityPerAssembly, 12);
   assert.equal(rows[1].quantityPerAssembly, 40);
-  assert.equal(rows[1].quantityUnit, "SETS");
+  assert.equal(rows[1].description, "10-32 HEX NYLOCK NUT (PAINT TO MATCH)");
+  assert.ok(!Object.hasOwn(rows[1], "quantityUnit"));
 });
 
 test("uses zero screw quantity when no gussets are listed in the fixture BOM", () => {
