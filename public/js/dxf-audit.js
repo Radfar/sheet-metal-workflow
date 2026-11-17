@@ -232,7 +232,7 @@ export async function auditDxfFiles(dxfEntries, dxfMetadata, pdfPages, fixtureTa
 
   const pdfFixtureMatch = normalize(page1).includes(normalize(fixtureTag));
   const pdfQuantityMatch = scheduleItem
-    ? new RegExp("\b(?:QTY|QUANTITY)\.?\s*[:=#-]?\s*" + String(scheduleItem.qty) + "\b", "i").test(page1)
+    ? new RegExp("\\b(?:QTY|QUANTITY)\\.?\\s*[:=#-]?\\s*" + String(scheduleItem.qty) + "\\b", "i").test(page1)
     : false;
 
   checks.push({
