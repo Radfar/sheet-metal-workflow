@@ -346,6 +346,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       fixtureDescription = "",
       finish = "",
       bomFilenameDescription = "",
+      shopFormat = false,
       shipDate = "",
       note = "",
       components = []
@@ -385,7 +386,37 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       editAs: "oneCell"
     });
 
-    const pageCount = Math.ceil(components.length / BOM_ROWS_PER_SHEET);
+    // Arrange BOM items into shop-floor groups while preserving the
+    // SolidWorks order within each group:
+    // Channels, Angles, Splices, End Caps, Common Parts, then Gussets.
+    // Gusset detection has highest priority because its standardized description
+    // contains "Chn'l" but Gussets must never be classified as Channels.
+    // A null entry represents the intentionally blank separator row.
+    const classifyBomGroup = component => {
+      const source = [component.partNumber, component.description, component.componentType]
+        .filter(Boolean).join(" ").toUpperCase();
+      if (/GUSSET|\bGUS\b/i.test(source)) return "gussets";
+      if (/SPLICE|SPLICE-PLT/i.test(source)) return "splices";
+      if (/END[\s_-]*CAP|\bENDCAP\b/i.test(source)) return "endCaps";
+      if (/\bCHANNEL\b|\bCHN['’]?L\b|\bTROUGH\b/i.test(source)) return "channels";
+      if (/SHORT[\s_-]*ANG|\bANGLE\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(source)) return "angles";
+      return "common";
+    };
+    const groupOrder = ["channels", "angles", "splices", "endCaps", "common", "gussets"];
+    const groupedComponents = Object.fromEntries(
+      groupOrder.map(group => [
+        group,
+        components.filter(component => classifyBomGroup(component) === group)
+      ])
+    );
+    const bomRows = [];
+    groupOrder.forEach(group => {
+      if (!groupedComponents[group].length) return;
+      if (bomRows.length) bomRows.push(null);
+      bomRows.push(...groupedComponents[group]);
+    });
+
+    const pageCount = Math.ceil(bomRows.length / BOM_ROWS_PER_SHEET);
     const worksheets = [templateWorksheet];
     for (let page = 2; page <= pageCount; page++) {
       worksheets.push(cloneTemplateWorksheet(templateWorksheet, workbook, "BOM " + page));
@@ -415,8 +446,14 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           worksheet.getCell(rowNumber, column).value = null;
         }
 
-        const component = components[pageIndex * BOM_ROWS_PER_SHEET + index];
-        if (!component) continue;
+        const component = bomRows[pageIndex * BOM_ROWS_PER_SHEET + index];
+        if (!component) {
+          // Ensure the group separator is genuinely empty across the BOM table.
+          for (let column = 1; column <= 11; column++) {
+            worksheet.getCell(rowNumber, column).value = null;
+          }
+          continue;
+        }
 
         const quantity = Number(component.quantityPerAssembly);
         if (!Number.isFinite(quantity) || quantity < 0 || component.quantityPerAssembly === "") {
@@ -425,8 +462,62 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
 
         worksheet.getCell(rowNumber, 1).value =
           component.itemNo || String(pageIndex * BOM_ROWS_PER_SHEET + index + 1);
-        worksheet.getCell(rowNumber, 2).value =
-          String(component.description || component.partNumber || "").trim();
+        const descriptionCell = worksheet.getCell(rowNumber, 2);
+        // Normalize the data-row font size so the first item matches all
+        // subsequent BOM items, without changing bold/italic/font family.
+        for (const column of [1, 2, 10, 11]) {
+          const cell = worksheet.getCell(rowNumber, column);
+          cell.font = { ...(cell.font || {}), size: 10 };
+        }
+        const description = String(component.description || "").trim();
+        const partNumber = String(component.partNumber || "").trim().replace(/^"+|"+$/g, "");
+
+        if (shopFormat && !partNumber) {
+          throw new Error("Missing SolidWorks part number for BOM item " + (component.itemNo || rowNumber - 11) + ".");
+        }
+
+        if (shopFormat && partNumber) {
+          const baseFont = { ...(descriptionCell.font || {}) };
+          const richText = [];
+          // Manufacturing suffixes belong after the quoted SolidWorks part number.
+          // Keep the suffix as a separate trailing segment so the export order is:
+          // description + process + quoted part number + manufacturing suffix.
+          const suffixMatch = description.match(/\s*(\(Made in \d+pcs\.\)\s*\([^)]*\))\s*$/i);
+          const manufacturingSuffix = suffixMatch ? suffixMatch[1] : "";
+          const descriptionBody = suffixMatch
+            ? description.slice(0, suffixMatch.index).trimEnd()
+            : description;
+          const isSplicePlate = partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3";
+          const isGusset = /GUSSET|\bGUS\b/i.test(partNumber) || /\bReturn Gusset\b/i.test(descriptionBody);
+          if (descriptionBody && (isSplicePlate || descriptionBody.includes("(Laser/SM)") || descriptionBody.includes("(Laser)"))) {
+            const laserMarker = descriptionBody.includes("(Laser/SM)") ? "(Laser/SM)" : "(Laser)";
+            const laserIndex = descriptionBody.lastIndexOf(laserMarker);
+            if (laserIndex >= 0) {
+              const beforeLaser = descriptionBody.slice(0, laserIndex).trimEnd();
+              const afterLaser = descriptionBody.slice(laserIndex + laserMarker.length).trim();
+              if (beforeLaser) richText.push({ text: beforeLaser + " ", font: baseFont });
+              richText.push({ text: laserMarker, font: { ...baseFont, bold: true } });
+              if (afterLaser) richText.push({ text: " " + afterLaser + " ", font: baseFont });
+            } else {
+              richText.push({ text: descriptionBody + " ", font: baseFont });
+            }
+          } else if (descriptionBody) {
+            richText.push({ text: descriptionBody + " ", font: baseFont });
+          }
+          // Gusset is a standardized common part: its approved description
+          // intentionally replaces the SolidWorks part number in the Shop BOM.
+          if (!isGusset) {
+            richText.push({
+              text: '"' + partNumber + '"',
+              font: { ...baseFont, bold: true }
+            });
+          }
+          if (manufacturingSuffix) richText.push({ text: " " + manufacturingSuffix, font: baseFont });
+          descriptionCell.value = { richText };
+        } else {
+          descriptionCell.value = description || String(component.partNumber || "").trim();
+        }
+
         worksheet.getCell(rowNumber, 10).value = quantity;
 
         if (fixtureQty > 0) {

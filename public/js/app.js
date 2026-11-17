@@ -1,3 +1,4 @@
+import { discoverProjectFixtureEntries } from "./project-folder.js";
 const $ = id => document.getElementById(id);
 
 let components = [];
@@ -9,6 +10,9 @@ const fixtureData = {};
 let templateAssets = { stellarLogo: "", radioButton: "" };
 let selectedFixtureFolderEntries = null;
 let selectedFixtureFolderName = "";
+let selectedProjectRootName = "";
+let importedProjectTags = [];
+let discoveredProjectTags = [];
 
 
 function makeBomFilename() {
@@ -124,38 +128,292 @@ function matchDxfIndex(partNumber, files, fixtureTag) {
 
   return bestScore >= 70 ? bestIndex : "";
 }
-function makeDraftDescription(partNumber, dxf) {
-  if (!dxf) return "";
-  const label = String(dxf.componentLabel || partNumber || "").toUpperCase();
-  let componentType = "";
-
-  if (/SHORT[\s_-]*ANG/.test(label) || /SHORT[\s_-]*ANG/.test(String(partNumber).toUpperCase())) {
-    componentType = "Short angle";
-  } else if (/\bANG(?:LE)?\b/.test(label) || /\bANG(?:LE)?\b/.test(String(partNumber).toUpperCase())) {
-    componentType = "Angle";
-  } else if (/TROUGH/.test(label)) {
-    componentType = "Trough section";
-  } else if (/END[\s_-]*CAP/.test(label) || /END[\s_-]*CAP/.test(String(partNumber).toUpperCase())) {
-    componentType = "End cap";
-  } else if (/GUS/.test(label) || /GUSSET/.test(String(partNumber).toUpperCase())) {
-    componentType = "Gusset";
-  } else if (/SPLICE[\s_-]*PLT/.test(label) || /SPLICE[\s_-]*PLT/.test(String(partNumber).toUpperCase())) {
-    componentType = "Splice plate";
-  } else {
-    componentType = label.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
-  }
-
-  if (!componentType) return "";
-  const part = String(partNumber || "").trim();
-  const dimensions = dxf.flatWidth && dxf.flatHeight
-    ? "Flat pattern " + dxf.flatWidth + " × " + dxf.flatHeight + " in"
-    : "";
-  const material = dxf.materialCode ? "Material code " + dxf.materialCode : "";
-  return [componentType + (part ? " " + part : ""), dimensions, material]
-    .filter(Boolean).join(" — ");
+function inferredComponentType(component, matchedDxf = null) {
+  const source = [component.partNumber, component.description, matchedDxf?.componentLabel].filter(Boolean).join(" ").toUpperCase();
+  if (/SHORT[\\s_-]*ANG/.test(source)) return "Angle";
+  if (/\\bANG(?:LE)?\\b|[-_]ANG[-_\\d]/.test(source)) return "Angle";
+  if (/CHN|CHANNEL|TROUGH/.test(source)) return "Channel";
+  if (/END[\\s_-]*CAP|ENDCAP|SPLICE[\\s_-]*PLT|\\bPLT\\b|PLATE/.test(source)) return "Plate";
+  if (/GUSSET|\\bGUS\\b/.test(source)) return "Gusset";
+  return component.componentType || "";
 }
 
+function inferredComponentName(component, matchedDxf = null) {
+  const source = [component.partNumber, component.description, matchedDxf?.componentLabel].filter(Boolean).join(" ").toUpperCase();
+  if (/SHORT[\\s_-]*ANG/.test(source)) return "Short angle";
+  if (/END[\\s_-]*CAP|ENDCAP/.test(source)) return "End cap";
+  if (/SPLICE[\\s_-]*PLT|SPLICE[\\s_-]*PLATE/.test(source)) return "Splice plate";
+  if (/GUSSET|\\bGUS\\b/.test(source)) return "Return gusset";
+  if (/CHN|CHANNEL|TROUGH/.test(source)) return "Channel";
+  if (/[-_]ANG(?:[-_\\d]|$)|\\bANGLE\\b/.test(source)) return "Angle";
+  if (/PLT|PLATE/.test(source)) return "Plate";
+  return "Component";
+}
 
+function appendDxfDetails(description, component, matchedDxf) {
+  const width = String(component.flatPatternWidth || matchedDxf?.flatWidth || "").trim();
+  const height = String(component.flatPatternHeight || matchedDxf?.flatHeight || "").trim();
+  const materialCode = String(component.materialCode || matchedDxf?.materialCode || "").trim();
+  const details = [];
+  if (width && height) details.push("Flat pattern " + width + " × " + height + " in");
+  if (materialCode) details.push("Material code " + materialCode);
+  return details.length ? description + " — " + details.join(" — ") : description;
+}
+
+function buildShopBomDescription(component, matchedDxf = null) {
+  const value = key => String(component[key] ?? "").trim();
+  const type = value("componentType") || inferredComponentType(component, matchedDxf);
+  const gauge = value("gauge");
+  const process = value("manufacturingProcess");
+  const partId = value("partIdentification") || value("partNumber");
+  const partToken = partId ? '"' + partId + '"' : "";
+  let base = "";
+
+  if (type === "Angle" || type === "Channel") {
+    const dimensions = value("crossSectionDimensions");
+    const profile = type === "Channel" ? "Chn'l" : "Angle";
+    if (dimensions || gauge || value("overallLength")) {
+      base = [dimensions, gauge, profile,
+        value("overallLength") ? "x " + value("overallLength") : "",
+        process ? "(" + process + ")" : "", partToken].filter(Boolean).join(" ");
+    }
+  } else if (type === "Plate") {
+    const dimensions = [value("plateLength"), value("plateWidth")].filter(Boolean).join(" x ");
+    if (dimensions || gauge) {
+      base = [dimensions, gauge, "Plt.", process ? "(" + process + ")" : "", partToken]
+        .filter(Boolean).join(" ");
+    }
+  } else if (type === "Gusset") {
+    if (value("geometryDimensions") || gauge || value("additionalDimensions")) {
+      base = [value("geometryDimensions"), gauge, value("profileType"),
+        value("additionalDimensions") ? "x " + value("additionalDimensions") : "",
+        "Return Gusset", process ? "(" + process + ")" : "", partToken]
+        .filter(Boolean).join(" ");
+    }
+  } else if (type === "Purchased hardware") {
+    base = [value("hardwareSize"), value("hardwareType"),
+      value("hardwareLength") ? "x " + value("hardwareLength") : ""].filter(Boolean).join(" ");
+  } else if (type) {
+    const dimensions = value("geometryDimensions");
+    if (dimensions || gauge || value("overallLength")) {
+      base = [dimensions, gauge, type,
+        value("overallLength") ? "x " + value("overallLength") : "",
+        process ? "(" + process + ")" : "", partToken].filter(Boolean).join(" ");
+    }
+  }
+
+  if (!base) {
+    const partNumber = value("partNumber") || value("partIdentification");
+    base = inferredComponentName(component, matchedDxf) + (partNumber ? " " + partNumber : "") +
+      (process ? " (" + process + ")" : "");
+  }
+  return { description: appendDxfDetails(base, component, matchedDxf), missing: [] };
+}
+
+function makeDraftDescription(component, matchedDxf) {
+  return buildShopBomDescription(component, matchedDxf).description;
+}
+
+// Format verified engineering dimensions for the historical shop description.
+// This is presentation-only: it never reads DXF flat-pattern dimensions.
+function formatShopDimension(value) {
+  let raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/["″]$/.test(raw)) raw = raw.slice(0, -1).trim();
+
+  // Convert decimal inch values only when exactly representable to 1/16 in.
+  // Otherwise preserve the entered precision.
+  if (/^\d+(?:\.\d+)?$/.test(raw)) {
+    const number = Number(raw);
+    if (Number.isFinite(number)) {
+      let whole = Math.floor(number);
+      const fraction = number - whole;
+      const sixteenths = Math.round(fraction * 16);
+      if (Math.abs(fraction - sixteenths / 16) < 1e-7) {
+        if (sixteenths === 16) whole += 1;
+        const numerator = sixteenths === 16 ? 0 : sixteenths;
+        const gcd = (a, b) => b ? gcd(b, a % b) : a;
+        const divisor = numerator ? gcd(numerator, 16) : 16;
+        const fractionText = numerator ? (numerator / divisor) + "/" + (16 / divisor) : "";
+        raw = [whole || "", fractionText].filter(Boolean).join(" ");
+        if (!raw) raw = "0";
+      }
+    }
+  }
+  return raw + '"';
+}
+
+function formatShopDimensionSequence(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  return raw.split(/(\s*[xX&]\s*)/).map(part => {
+    if (/^[\s]*[xX][\s]*$/.test(part)) return " x ";
+    if (/^[\s]*&[\s]*$/.test(part)) return " & ";
+    return formatShopDimension(part);
+  }).join("").trim();
+}
+
+function quoteShopPartId(value) {
+  const partId = String(value ?? "").trim().replace(/^"+|"+$/g, "");
+  return partId ? '"' + partId + '"' : "";
+}
+
+// Shop-format export is a presentation-only rearrangement of the existing
+// DXF-based BOM description. Keep every existing text segment unchanged;
+// move the DXF-derived details (flat-pattern dimensions/material code) before
+// the component identity. Do not derive or add manufacturing information.
+function formatShopInchDimension(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return value;
+  const sixteenths = Math.round(numericValue * 16);
+  const whole = Math.floor(sixteenths / 16);
+  let numerator = sixteenths % 16;
+  if (numerator === 0) return String(whole);
+  let denominator = 16;
+  while (numerator % 2 === 0) {
+    numerator /= 2;
+    denominator /= 2;
+  }
+  const fraction = numerator + "/" + denominator;
+  return whole > 0 ? whole + " " + fraction : fraction;
+}
+function convertShopInchDimensions(description) {
+  let result = description.replace(
+    /(\d+(?:\.\d+)?)\s*([×x])\s*(\d+(?:\.\d+)?)\s*in\b/gi,
+    (_match, first, separator, second) =>
+      formatShopInchDimension(first) + '"' + " x " +
+      formatShopInchDimension(second) + '"'
+  );
+  result = result.replace(/(\d+\.\d+)\s*in\b/gi,
+    (_match, value) => formatShopInchDimension(value) + '"');
+  return result;
+}
+function buildShopStandardExportDescription(component) {
+  const existingDescription = String(component.description ?? "").trim();
+  const segments = existingDescription.split(/\s+—\s+/).map(segment => segment.trim()).filter(Boolean);
+  const identity = segments.length > 1 ? segments.shift() : "";
+  let description = segments.join(" ")
+    .replace(/Material code\s+C16\b/gi, "16GA.")
+    .replace(/Material code\s+C11\b/gi, "11GA.")
+    .replace(/\bchannel\b/gi, "Chn'l")
+    .replace(/\s+/g, " ").trim();
+
+  const partNumber = String(component.partNumber ?? "").trim().replace(/^"+|"+$/g, "");
+  description = convertShopInchDimensions(description);
+
+  if (partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3") {
+    description = description.replace(/\bFlat pattern\b/gi, "")
+      .replace(/\bPlate\b/gi, "").replace(/\bSplice\b/gi, "")
+      .replace(/\s+/g, " ").trim();
+    description = description.replace(partNumber, "").replace(/\s+/g, " ").trim();
+    const gauge = description.match(/\b(?:16|11)GA\./i)?.[0] || "";
+    const dimensions = gauge ? description.replace(gauge, "").trim() : description;
+    description = [dimensions, gauge, "Plt.", "(Laser)"].filter(Boolean).join(" ");
+  } else {
+    const identitySource = identity + " " + partNumber + " " + description;
+    const isEndcap = /END[\s_-]*CAP|ENDCAP/i.test(identitySource);
+    const isGusset = /GUSSET|\bGUS\b/i.test(identitySource);
+    const isShortAngle = /SHORT[\s_-]*ANG/i.test(partNumber) || /SHORT[\s_-]*ANGLE/i.test(identity);
+    // Apply the trough-section shop format across fixture tags, not only T01A.
+    // Require a fixture-style part ID and a source channel/trough descriptor
+    // so ordinary channel components keep their existing generic format.
+    const troughSource = identitySource + " " + description;
+    const isFixturePartId = /^T\d+[A-Z]?-[A-Z]$/i.test(partNumber);
+    const isChannelSource = /\bCHANNEL\b|\bCHN'L\b/i.test(troughSource);
+    const channelDimensions = description.match(/(\d+(?:\s+\d+\/\d+)?|\d+\/\d+)\s*["″]?\s*[x×]\s*(\d+(?:\s+\d+\/\d+)?|\d+\/\d+)\s*["″]?/i);
+    const hasApprovedChannelProfile = Boolean(channelDimensions &&
+      channelDimensions[2].replace(/\s+/g, " ").trim() === "24 3/16");
+    const isSpecialFixtureChannel = isFixturePartId && isChannelSource && hasApprovedChannelProfile;
+    const isFixtureTroughPart = isFixturePartId && /\bTROUGH\b|\bCHANNEL\b|\bCHN'L\b/i.test(troughSource);
+    const isTroughSection = !isSpecialFixtureChannel &&
+      (isFixtureTroughPart || /\bTROUGH\s+SECTION\b/i.test(troughSource));
+
+    if (isSpecialFixtureChannel) {
+      const overallLength = formatShopDimension(channelDimensions[1]);
+      const gauge = description.match(/\b\d+GA\./i)?.[0] || "";
+      const fixedProfile = '7 11/16" X 9" x 7 11/16"';
+      description = [fixedProfile, gauge, "Chn'l", "x " + overallLength,
+        "(Laser/SM)", "(Made in 1pcs.)", "(0/0)"].filter(Boolean).join(" ");
+    } else if (isEndcap || isGusset || isTroughSection) {
+      let name = identity;
+      if (isEndcap) {
+        name = name.replace(/\s+ENDCAP\s*$/i, "").replace(/\s+/g, " ").trim();
+      } else if (isGusset) {
+        name = name.replace(/\s+REMOVABLE[-_ ]GUSSET\s*$/i, "")
+          .replace(/\bReturn\s+gusset\b/gi, "Gusset").replace(/\s+/g, " ").trim();
+      } else if (isTroughSection) {
+        // The component type is already represented by the BOM category.
+        // Do not repeat it immediately before the quoted part number.
+        // The SolidWorks part number is appended separately in bold by the
+        // Excel exporter.
+        name = "";
+      }
+
+      description = description.replace(/\bFlat pattern\b/gi, "")
+        .replace(/\b(?:Chn'l|Channel)\b/gi, "")
+        .replace(/\s*\(Laser(?:\/SM)?\)\s*/gi, " ")
+        .replace(/\s+/g, " ").trim();
+      const gauge = description.match(/\b(?:16|11)GA\./i)?.[0] || "";
+      const dimensions = gauge ? description.replace(gauge, "").trim() : description;
+
+      if (isEndcap) {
+        // The component type "End cap" is redundant before the quoted part number.
+        name = "";
+        description = [dimensions, gauge, "Plt.", "(Laser)", name].filter(Boolean).join(" ");
+      } else if (isGusset) {
+        // All Gussets are one standardized common part across the project.
+        // Ignore source dimensions and the SolidWorks part number in the
+        // Shop-Standard description; use the approved fixed description.
+        description = "1 3/4\" x 8 13/16\" x 1 3/4\" 16GA. Chn'l x 6 1/16\" & 1 3/4\" Return Gusset (Laser/SM)";
+      } else if (isShortAngle) {
+        description = [dimensions, gauge, "(Laser/SM)", name].filter(Boolean).join(" ");
+      } else {
+        description = [dimensions, gauge, "(Laser/SM)", name].filter(Boolean).join(" ");
+      }
+    } else {
+      const sourceIdentity = description + " " + identity + " " + partNumber;
+      const isAngle = /\bAngle\b|\bANG\b|[-_]ANG(?:[-_\d]|$)|SHORT[\s_-]*ANG/i.test(sourceIdentity);
+      const isChannel = /\bChn'l\b/i.test(sourceIdentity);
+      if (isAngle) {
+        // Angle stock uses a standard 1 in x 1 3/8 in profile whenever
+        // the source cross-section is recorded as 2 3/16 in or 2.18 in.
+        // The first dimension is the overall angle length.
+        const angleDimensions = description.match(
+          /(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)["″]?\s*[x×]\s*(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)["″]?/i
+        );
+        const secondAngleDimension = angleDimensions?.[2]?.replace(/\s+/g, " ").trim();
+        const hasStandardAngleCrossSection =
+          secondAngleDimension === "2 3/16" || secondAngleDimension === "2.18";
+
+        if (hasStandardAngleCrossSection) {
+          const overallLength = formatShopDimension(angleDimensions[1]);
+          const gauge = description.match(/\b\d+GA\./i)?.[0] || "";
+          description = ['1" x 1 3/8"', gauge, "Angle", "x " + overallLength, "(Laser/SM)"]
+            .filter(Boolean).join(" ");
+        } else {
+          // Preserve the existing generic angle treatment when the source
+          // cross-section does not match the approved standard profile rule.
+          description = description.replace(/\bFlat pattern\b/gi, "")
+            .replace(/\bAngle\b/gi, "").replace(/\bANG\b(?![-_]\d)/gi, "")
+            .replace(/\s+/g, " ").trim();
+          const gaugeMatch = description.match(/\b\d+GA\./i);
+          if (gaugeMatch) {
+            const gauge = gaugeMatch[0];
+            description = description.replace(gauge, gauge + " Angle");
+          }
+          const angleIdentity = identity.replace(/^\s*(?:Short\s+)?Angle\s*/i, "").trim();
+          if (angleIdentity) description = [description, angleIdentity].filter(Boolean).join(" ");
+        }
+      } else if (isChannel) {
+        description = description.replace(/\bFlat pattern\b/gi, "");
+        if (identity) description = [description, identity].filter(Boolean).join(" ");
+      } else if (identity) {
+        description = [description, identity].filter(Boolean).join(" ");
+      }
+    }
+  }
+  return description.replace(/\s+/g, " ").trim();
+}
 const MANUFACTURING_FIELDS = [["componentType","Component type","select"],["materialCode","Material code","text"],["cuttingListIdentity","Approved common DXF identity / filename","text"],["materialGrade","Material / grade","text"],["gauge","Thickness / gauge","text"],["cuttingListFinish","Laser order finish (optional)","text"],["crossSectionDimensions","Cross-section dimensions","text"],["geometryDimensions","Geometry dimensions","text"],["profileType","Profile type","text"],["additionalDimensions","Additional dimensions","text"],["overallLength","Overall finished length","text"],["plateLength","Plate length","text"],["plateWidth","Plate width","text"],["flatPatternWidth","Flat-pattern width","text"],["flatPatternHeight","Flat-pattern height","text"],["manufacturingProcess","Manufacturing process","text"],["partIdentification","Part identification on drawing","text"],["pieceCount","Number of fabricated pieces","text"],["pieceLengths","Individual piece lengths (comma or / separated)","text"],["hardwareSize","Hardware size","text"],["hardwareType","Hardware type / specification","text"],["hardwareLength","Hardware length","text"],["drawingReference","Drawing / detail reference","text"],["manufacturingNotes","Manufacturing notes","text"]];
 
 function engineeringExample(key, component) {
@@ -206,41 +464,43 @@ function renderManufacturingFields(component, index) {
       if (key === "componentType") return '<label>' + label + '<select class="engineering-input" data-component-field="' + key + '">' + typeOptions.map(option => '<option value="' + esc(option) + '"' + (value === option ? ' selected' : '') + '>' + esc(option || 'Select type') + '</option>').join("") + '</select><small class="field-example">' + esc(engineeringExample(key, component)) + '</small></label>';
       return '<label>' + label + '<input class="engineering-input" type="text" data-component-field="' + key + '" value="' + esc(value) + '" placeholder="' + esc(engineeringExample(key, component)) + '"><small class="field-example">' + esc(engineeringExample(key, component)) + '</small></label>';
     }).join("") + '</div>' +
-    '<div class="engineering-actions"><button type="button" class="secondary" data-generate-description="' + index + '">Build BOM description from these fields</button><span>Only entered values are used; confirm the description before release.</span></div>' +
+    '<div class="engineering-actions"><button type="button" class="secondary" data-generate-description="' + index + '">Build shop-format BOM description</button><span>Only entered values are used; confirm the description before release.</span></div>' +
     '</details></td></tr>';
 }
 
 function rebuildComponents() {
   components = bomLines.map(line => {
     const dxfIndex = matchDxfIndex(line.partNumber, dxfFiles, currentFixtureTag);
+    const matchedDxf = dxfIndex === "" ? null : dxfFiles[Number(dxfIndex)];
+    const component = {
+      ...clone(line),
+      materialCode: line.materialCode || matchedDxf?.materialCode || "",
+      flatPatternWidth: line.flatPatternWidth || matchedDxf?.flatWidth || "",
+      flatPatternHeight: line.flatPatternHeight || matchedDxf?.flatHeight || ""
+    };
     let description = String(line.description || "").trim();
     let descriptionDraft = Boolean(line.descriptionDraft);
+    const origin = line.descriptionOrigin || (description && description === String(line.partNumber || "").trim() ? "solidworks" : "");
 
-    // Auto-generated descriptions are derived from the DXF match. If the
-    // match changes, refresh an existing auto-draft so a previous incorrect
-    // association cannot survive into the exported BOM. Manual descriptions
-    // (descriptionDraft === false) are preserved.
-    if (dxfIndex !== "" && (!description || descriptionDraft)) {
-      description = makeDraftDescription(line.partNumber, dxfFiles[Number(dxfIndex)]);
+    // SolidWorks descriptions are source labels, not the final manufacturing
+    // description. Replace source labels and prior generated drafts with the
+    // enriched shop format. Preserve descriptions explicitly edited by users.
+    if (!line.manual && origin !== "manual" && (origin === "solidworks" || origin === "generated" || descriptionDraft || !description)) {
+      description = makeDraftDescription(component, matchedDxf);
       descriptionDraft = Boolean(description);
-      if (descriptionDraft) {
-        line.description = description;
-        line.descriptionDraft = true;
-      }
+      component.descriptionOrigin = "generated";
+      line.description = description;
+      line.descriptionDraft = descriptionDraft;
+      line.descriptionOrigin = "generated";
     }
-
-    const matchedDxf = dxfIndex === "" ? null : dxfFiles[Number(dxfIndex)];
     return {
-      ...clone(line),
+      ...component,
       itemNo: line.itemNo,
       partNumber: line.partNumber,
       quantityPerAssembly: line.quantityPerAssembly,
       description,
       descriptionDraft,
       dxfIndex,
-      materialCode: line.materialCode || matchedDxf?.materialCode || "",
-      flatPatternWidth: line.flatPatternWidth || matchedDxf?.flatWidth || "",
-      flatPatternHeight: line.flatPatternHeight || matchedDxf?.flatHeight || "",
       manual: Boolean(line.manual)
     };
   });
@@ -259,6 +519,7 @@ function saveCurrentFixture() {
     sourceFiles: clone(fixtureData[currentFixtureTag]?.sourceFiles || {}),
     drawingText: drawingText || fixtureData[currentFixtureTag]?.drawingText || "",
     bomGenerated: Boolean(fixtureData[currentFixtureTag]?.bomGenerated),
+    shopBomGenerated: Boolean(fixtureData[currentFixtureTag]?.shopBomGenerated),
     generatedAt: fixtureData[currentFixtureTag]?.generatedAt || "",
     includeInLaser: fixtureData[currentFixtureTag]?.includeInLaser !== false
   };
@@ -281,6 +542,7 @@ function renderScheduleEditor() {
       '<td><input class="schedule-cell" data-schedule-field="length" value="' + esc(item.length) + '"></td>' +
       '<td><input class="schedule-cell" data-schedule-field="finish" value="' + esc(item.finish) + '"></td>' +
       '<td><input class="schedule-cell qty-cell" type="number" min="0" step="any" data-schedule-field="qty" value="' + esc(item.qty) + '"></td>' +
+      '<td><button class="remove schedule-remove" type="button" data-delete-schedule-index="' + index + '">Delete</button></td>' +
     '</tr>'
   ).join("");
 }
@@ -304,22 +566,31 @@ function renderSelectedSchedule() {
 }
 
 function renderSummary() {
-  const generated = schedule.filter(item => fixtureData[item.tag]?.bomGenerated);
-  $("summaryRows").innerHTML = generated.length ? generated.map(item => {
-    const saved = fixtureData[item.tag];
-    const count = saved?.components?.length || 0;
-    const include = saved?.includeInLaser !== false;
-    return '<tr><td>' + esc(item.no) + '</td><td>' + esc(item.tag) + '</td><td>' +
+  if (!discoveredProjectTags.length) {
+    $("summaryRows").innerHTML = '<tr><td colspan="13" class="empty">Select a project folder to discover fixture units.</td></tr>';
+    updateLaserOrderButtonState();
+    return;
+  }
+
+  const visibleTags = schedule.map(item => item.tag).filter(tag => discoveredProjectTags.includes(tag));
+  $("summaryRows").innerHTML = visibleTags.map(tag => {
+    const item = schedule.find(entry => entry.tag === tag);
+    const saved = fixtureData[tag] || {};
+    const imported = importedProjectTags.includes(tag);
+    const count = imported ? (saved.components?.length || 0) : 0;
+    const include = saved.includeInLaser !== false;
+    return '<tr><td>' + esc(item.no) + '</td><td><strong>' + esc(item.tag) + '</strong></td><td>' +
       esc(item.mounting) + '</td><td>' + esc(item.profile) + '</td><td>' +
       esc(item.width) + '</td><td>' + esc(item.length) + '</td><td>' +
       esc(item.finish) + '</td><td>' + esc(item.qty) + '</td><td>' +
-      esc(count) + '</td><td><span class="summary-check" title="BOM Excel generated">✓</span></td>' +
-      '<td><input type="checkbox" data-laser-include="' + esc(item.tag) + '"' + (include ? ' checked' : '') +
-      ' aria-label="Include ' + esc(item.tag) + ' in Laser Order Request"></td></tr>';
-  }).join("") : '<tr><td colspan="11" class="empty">No fixture BOM has been generated yet.</td></tr>';
+      esc(count || "—") + '</td><td>' + (imported ? "Imported" : "Attention") + '</td><td>' +
+      (imported && saved.shopBomGenerated ? "✓" : "—") + '</td><td><input type="checkbox" data-laser-include="' +
+      esc(item.tag) + '"' + (imported && saved.bomGenerated && include ? " checked" : "") +
+      (!imported || !saved.bomGenerated ? " disabled" : "") + ' aria-label="Include ' + esc(item.tag) +
+      ' in Laser Order Request"></td></tr>';
+  }).join("");
   updateLaserOrderButtonState();
 }
-
 function updateLaserOrderButtonState() {
   const hasSelectedGeneratedBom = schedule.some(item => {
     const saved = fixtureData[item.tag];
@@ -330,7 +601,7 @@ function updateLaserOrderButtonState() {
 
 function renderComponents() {
   $("rowCount").textContent = components.length + " BOM item" + (components.length === 1 ? "" : "s");
-  $("exportBtn").disabled = components.length === 0;
+  $("exportShopBtn").disabled = components.length === 0;
   const body = $("componentRows");
 
   if (!components.length) {
@@ -559,6 +830,60 @@ $("addScheduleRowBtn").addEventListener("click", () => {
   $("scheduleStatus").className = "ok";
 });
 
+$("scheduleRows").addEventListener("click", event => {
+  const button = event.target.closest("[data-delete-schedule-index]");
+  if (!button) return;
+
+  const index = Number(button.dataset.deleteScheduleIndex);
+  const row = schedule[index];
+  if (!row) return;
+
+  if (!window.confirm("Are you sure to delete this row?")) return;
+
+  const deletedTag = row.tag;
+  schedule.splice(index, 1);
+  schedule.forEach((item, rowIndex) => {
+    item.no = rowIndex + 1;
+  });
+
+  if (deletedTag) {
+    delete fixtureData[deletedTag];
+    importedProjectTags = importedProjectTags.filter(tag => tag !== deletedTag);
+    discoveredProjectTags = discoveredProjectTags.filter(tag => tag !== deletedTag);
+  }
+
+  const deletedCurrentFixture = currentFixtureTag === deletedTag;
+  if (deletedCurrentFixture) {
+    currentFixtureTag = "";
+    if (schedule.length) {
+      $("fixtureSelect").value = schedule[0].tag;
+      loadFixture(schedule[0].tag);
+    } else {
+      $("fixtureSelect").innerHTML = "";
+      $("fixtureTag").value = "";
+      $("fixtureQuantity").value = "";
+      $("fixtureDescription").value = "";
+      $("finish").value = "";
+      $("finishDescription").value = "";
+      $("bomFilenameDescription").value = "";
+      $("currentFixtureLabel").textContent = "No fixture loaded";
+      renderSelectedSchedule();
+      render();
+    }
+  }
+
+  renderScheduleEditor();
+  renderFixtureOptions();
+  if (!deletedCurrentFixture) {
+    renderSelectedSchedule();
+    renderSummary();
+  }
+  $("scheduleStatus").textContent = deletedTag
+    ? "Schedule row " + (index + 1) + " (" + deletedTag + ") deleted."
+    : "Blank schedule row deleted.";
+  $("scheduleStatus").className = "ok";
+});
+
 $("importBomBtn").addEventListener("click", async () => {
   const file = $("solidworksFile").files[0];
   if (!file) {
@@ -646,21 +971,14 @@ async function extractDrawingPdfText(pdfFile) {
 async function readSelectedDirectory(handle) {
   const rootName = handle.name;
   const entries = [];
-  for await (const [name, child] of handle.entries()) {
-    if (child.kind === "file") {
-      entries.push({ file: await child.getFile(), path: rootName + "/" + name });
-      continue;
-    }
-    if (child.kind === "directory" && name.toUpperCase() === "DXF") {
-      entries.push({ file: null, path: rootName + "/" + name + "/" });
-      if (name !== "DXF") continue;
-      for await (const [dxfName, dxfHandle] of child.entries()) {
-        if (dxfHandle.kind === "file") {
-          entries.push({ file: await dxfHandle.getFile(), path: rootName + "/DXF/" + dxfName });
-        }
-      }
+  async function walk(directory, prefix) {
+    for await (const [name, child] of directory.entries()) {
+      const path = prefix + "/" + name;
+      if (child.kind === "file") entries.push({ file: await child.getFile(), path });
+      else if (child.kind === "directory") await walk(child, path);
     }
   }
+  await walk(handle, rootName);
   return entries;
 }
 
@@ -685,151 +1003,296 @@ function setFolderValidation({ bomDxf = false, pdf = false, pdfText = false } = 
     : "Drawing PDF not yet validated";
 }
 
+async function importFixtureFolder(folderTag, providedEntries) {
+  const tag = folderTag;
+  const entries = (providedEntries || []).filter(entry => entry && entry.file && entry.path);
+  if (!entries.length) throw new Error("No files were found in fixture folder " + tag + ".");
+  const isExcelOutput = path => path.split("/").some(part => /^excel$/i.test(part));
+  const workbooks = entries.filter(entry => /\.(xls|xlsx)$/i.test(entry.path) && !isExcelOutput(entry.path));
+  const preferredWorkbooks = workbooks.filter(entry => entry.path.split("/").some(part => /solid[\s_-]*works?|bom/i.test(part)));
+  let bomCandidates = preferredWorkbooks.length ? preferredWorkbooks : workbooks;
+  if (bomCandidates.length !== 1) {
+    const exact = workbooks.filter(entry => new RegExp("^" + tag + "\\.(xls|xlsx)$", "i").test(entry.path.split("/").pop()));
+    if (exact.length === 1) bomCandidates = exact;
+  }
+  if (bomCandidates.length !== 1) throw new Error(bomCandidates.length
+    ? "More than one possible SolidWorks BOM workbook was found outside the Excel output folder."
+    : "No SolidWorks BOM .xls/.xlsx workbook was found outside the Excel output folder.");
+  const pdfs = entries.filter(entry => /\.pdf$/i.test(entry.path));
+  const exactPdfs = pdfs.filter(entry => entry.path.split("/").pop().toLowerCase() === (tag + ".pdf").toLowerCase());
+  const pdfCandidates = exactPdfs.length ? exactPdfs : pdfs;
+  if (pdfCandidates.length !== 1) throw new Error(pdfCandidates.length
+    ? "More than one drawing PDF was found; name the intended file " + tag + ".pdf."
+    : "No drawing PDF was found.");
+  const dxfEntries = entries.filter(entry => {
+    const parts = entry.path.split("/");
+    return parts.some((part,index) => index > 0 && /^dxf$/i.test(part)) && /\.dxf$/i.test(entry.path);
+  }).sort((a,b) => a.path.localeCompare(b.path));
+  if (!dxfEntries.length) throw new Error("No DXF files were found inside a DXF subfolder.");
+  const bomResponse = await fetch("/api/import-solidworks-bom", {
+    method:"POST",headers:{"Content-Type":"application/octet-stream"},body:bomCandidates[0].file
+  });
+  const bomResult = await bomResponse.json();
+  if (!bomResponse.ok) throw new Error(bomResult.error || "SolidWorks BOM import failed.");
+  const dxfNames = dxfEntries.map(entry => entry.path.split("/").pop());
+  let dxfHashes = [];
+  if (window.crypto && window.crypto.subtle) {
+    try {
+      dxfHashes = await Promise.all(dxfEntries.map(async entry => {
+        const digest = await window.crypto.subtle.digest("SHA-256", await entry.file.arrayBuffer());
+        return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2,"0")).join("");
+      }));
+    } catch (error) { console.warn("DXF fingerprinting unavailable for " + tag, error); }
+  }
+  const dxfResponse = await fetch("/api/parse-dxf-list", {
+    method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({filenames:dxfNames.join("\n")})
+  });
+  const dxfResult = await dxfResponse.json();
+  if (!dxfResponse.ok) throw new Error(dxfResult.error || "DXF filename parsing failed.");
+  let pdfResult = {text:"",pageCount:0};
+  try { pdfResult = await extractDrawingPdfText(pdfCandidates[0].file); }
+  catch (error) { console.warn("PDF text extraction unavailable for " + tag, error); }
+  loadFixture(tag);
+  // loadFixture creates the fixture state only when a prior state exists.
+  // A first-time project-root import must initialize it before writing import flags.
+  if (!fixtureData[tag]) fixtureData[tag] = {};
+  bomLines = bomResult.components.map(line => ({...line,descriptionOrigin:"solidworks",descriptionDraft:true,manual:false}));
+  dxfFiles = dxfResult.components.map((component,index) => ({...component,sha256:dxfHashes[index] || ""}));
+  drawingText = pdfResult.text;
+  $("dxfInput").value = dxfNames.join("\n");
+  rebuildComponents();
+  fixtureData[tag].bomGenerated = false;
+  fixtureData[tag].shopBomGenerated = false;
+  fixtureData[tag].generatedAt = "";
+  fixtureData[tag].includeInLaser = true;
+  fixtureData[tag].sourceFiles = {
+    fixtureFolder:(selectedProjectRootName ? selectedProjectRootName + "/" : "") + tag,
+    drawingPdf:pdfCandidates[0].path,
+    solidworksBom:bomCandidates[0].path,
+    dxfFolder:dxfEntries[0].path.split("/").slice(0,-1).join("/") + "/",
+    dxfFilenames:dxfEntries.map(entry => entry.path)
+  };
+  fixtureData[tag].drawingText = drawingText;
+  saveCurrentFixture();
+  $("bomStatus").textContent = bomResult.count + " BOM item(s) read from " + bomCandidates[0].path + ".";
+  $("bomStatus").className = "ok";
+  $("parseStatus").textContent = dxfFiles.length + " DXF filename(s) read from " + tag + ". DXF contents were not uploaded.";
+  $("parseStatus").className = "ok";
+  $("fixtureSourcePaths").textContent = "Sources for " + tag + ": PDF " + pdfCandidates[0].path +
+    " · BOM " + bomCandidates[0].path + " · DXF " + dxfEntries.length + " file(s).";
+  $("dxfFilenamePreview").value = dxfNames.join("\n");
+  $("dxfFilenameDetails").hidden = false;
+  $("drawingTextPreview").value = drawingText || "No extractable text layer was found; the PDF remains identified as a source reference.";
+  $("drawingTextDetails").hidden = false;
+  setFolderValidation({bomDxf:true,pdf:true,pdfText:Boolean(drawingText)});
+  $("buildComponentTreeBtn").disabled = false;
+  $("componentTreePanel").hidden = true;
+  renderSummary();
+  return {tag,bomCount:bomResult.count,dxfCount:dxfEntries.length,pdfPages:pdfResult.pageCount};
+}
+
+async function importProjectRoot(entries, rootName) {
+  importedProjectTags = [];
+  discoveredProjectTags = [];
+  $("projectBatchActions").hidden = true;
+  $("projectBatchStatus").textContent = "Discovering fixture folders…";
+  renderSummary();
+  const tags = schedule.map(item => item.tag);
+  const discovered = discoverProjectFixtureEntries(entries, rootName, tags);
+  if (!discovered.size) throw new Error("No fixture folders matching the project schedule were found inside " + rootName + ".");
+  discoveredProjectTags = tags.filter(tag => discovered.has(tag));
+  selectedProjectRootName = rootName;
+  const failures = [];
+  for (const tag of tags) {
+    if (!discovered.has(tag)) continue;
+    try {
+      await importFixtureFolder(tag, discovered.get(tag));
+      importedProjectTags.push(tag);
+    } catch (error) {
+      failures.push(tag + ": " + error.message);
+    }
+  }
+  renderSummary();
+  $("fixtureFolderStatus").textContent = "Project folder " + rootName + ": " + importedProjectTags.length +
+    " fixture folder(s) imported; " + failures.length + " require attention.";
+  $("fixtureFolderStatus").className = failures.length ? "status-text" : "ok";
+  $("folderImportReview").textContent = importedProjectTags.length + " fixture folder(s) imported: " +
+    importedProjectTags.join(", ") + (failures.length ? ". Attention: " + failures.join(" | ") : "") +
+    ". Generate one Excel BOM per imported fixture.";
+  $("folderImportReview").className = failures.length ? "status-text" : "ok";
+  $("projectBatchActions").hidden = importedProjectTags.length === 0;
+  $("projectBatchStatus").textContent = importedProjectTags.length + " fixture unit(s) ready for batch export.";
+  if (failures.length) console.warn("Project folder import issues:", failures);
+}
+
 $("chooseFixtureFolderBtn").addEventListener("click", async () => {
   if (!("showDirectoryPicker" in window)) {
     $("fixtureFolderInput").click();
     return;
   }
-  resetFolderValidation("Selecting and reading the fixture folder…");
+  resetFolderValidation("Select the project root folder containing all fixture-unit folders…");
   try {
     const handle = await window.showDirectoryPicker({ mode: "read" });
-    selectedFixtureFolderEntries = await readSelectedDirectory(handle);
-    selectedFixtureFolderName = handle.name;
-    $("fixtureFolderStatus").textContent = "Selected folder: " + handle.name + " (" +
-      selectedFixtureFolderEntries.filter(entry => entry.file).length + " files discovered locally).";
+    $("fixtureFolderStatus").textContent = "Reading project folder " + handle.name + "…";
     $("fixtureFolderStatus").className = "status-text";
-    await importFixtureFolder();
+    await importProjectRoot(await readSelectedDirectory(handle), handle.name);
   } catch (error) {
     if (error.name !== "AbortError") {
-      $("fixtureFolderStatus").textContent = "Could not read the selected folder: " + error.message;
+      $("fixtureFolderStatus").textContent = error.message;
       $("fixtureFolderStatus").className = "error";
-      resetFolderValidation("Folder validation failed. Choose the correct fixture folder.");
+      resetFolderValidation("Project folder import failed. Check the folder structure.");
     }
   }
 });
 
 $("fixtureFolderInput").addEventListener("change", async () => {
-  selectedFixtureFolderEntries = null;
-  selectedFixtureFolderName = "";
   const files = Array.from($("fixtureFolderInput").files || []);
-  $("fixtureFolderStatus").textContent = files.length
-    ? "Selected folder: " + (files[0].webkitRelativePath || files[0].name).split("/")[0] + " (" + files.length + " files)."
-    : "Select the current fixture folder.";
+  if (!files.length) return;
+  const firstPath = String(files[0].webkitRelativePath || files[0].name).replace(/\\\\/g, "/");
+  const rootName = firstPath.split("/")[0];
+  const entries = files.map(file => ({
+    file,
+    path: String(file.webkitRelativePath || file.name).replace(/\\\\/g, "/")
+  }));
+  $("fixtureFolderStatus").textContent = "Reading project folder " + rootName + "…";
   $("fixtureFolderStatus").className = "status-text";
-  if (!files.length) {
-    resetFolderValidation();
-    return;
-  }
-  resetFolderValidation("Reading the selected fixture folder…");
   try {
-    await importFixtureFolder();
+    await importProjectRoot(entries, rootName);
   } catch (error) {
     $("fixtureFolderStatus").textContent = error.message;
     $("fixtureFolderStatus").className = "error";
-    resetFolderValidation("Folder validation failed. Choose the correct fixture folder.");
+    resetFolderValidation("Project folder import failed. Check the folder structure.");
+  } finally {
+    $("fixtureFolderInput").value = "";
   }
 });
 
-async function importFixtureFolder() {
-  const selected = selectedFixtureFolderEntries || Array.from($("fixtureFolderInput").files || []);
-  const tag = $("fixtureSelect").value;
-  const status = $("fixtureFolderStatus");
-  if (!selected.length) throw new Error("Select the fixture folder first.");
-  if (!tag) throw new Error("Select a fixture tag from the project schedule.");
-  const entries = selected.map(entry => entry && entry.path
-    ? entry
-    : ({ file: entry, path: String(entry.webkitRelativePath || entry.name).replace(/\\/g, "/") }));
-  const roots = [...new Set(entries.map(entry => entry.path.split("/")[0]))];
-  if (roots.length !== 1 || roots[0] !== tag) {
-    throw new Error("The selected folder must be named exactly " + tag + " (uppercase, matching the schedule). Found: " + roots.join(", "));
+async function generateProjectBatch() {
+  const button = $("projectShopBtn");
+  const tags = schedule.map(item => item.tag).filter(tag =>
+    importedProjectTags.includes(tag) && fixtureData[tag]?.components?.length
+  );
+  if (!tags.length) {
+    $("projectBatchStatus").textContent = "No valid fixture BOMs are available. Import the project folder first.";
+    $("projectBatchStatus").className = "error";
+    return;
   }
-  const bomCandidates = entries.filter(entry => entry.path === tag + "/" + tag + ".xls" || entry.path === tag + "/" + tag + ".xlsx");
-  if (bomCandidates.length !== 1) throw new Error("Expected exactly one " + tag + ".xls or " + tag + ".xlsx directly inside the fixture folder.");
-  const pdfCandidates = entries.filter(entry => entry.path === tag + "/" + tag + ".pdf");
-  if (pdfCandidates.length !== 1) throw new Error("Expected drawing file " + tag + ".pdf directly inside the fixture folder.");
-  if (entries.some(entry => {
-    const folderName = entry.path.split("/")[1];
-    return folderName && folderName.toUpperCase() === "DXF" && folderName !== "DXF";
-  })) throw new Error("The DXF subfolder must be named exactly DXF in uppercase.");
-  const dxfEntries = entries.filter(entry => {
-    const parts = entry.path.split("/");
-    return parts.length === 3 && parts[0] === tag && parts[1] === "DXF" && /\.dxf$/i.test(parts[2]);
-  }).sort((left, right) => left.path.localeCompare(right.path));
-  if (!dxfEntries.length) throw new Error("No DXF files found. Expected files directly inside " + tag + "/DXF/.");
-  status.textContent = "Reading the SolidWorks BOM and discovering DXF filenames…";
-  status.className = "status-text";
-  $("buildComponentTreeBtn").disabled = true;
-  const bomFile = bomCandidates[0].file;
-    const bomResponse = await fetch("/api/import-solidworks-bom", {
-      method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: bomFile
-    });
-    const bomResult = await bomResponse.json();
-    if (!bomResponse.ok) throw new Error(bomResult.error || "SolidWorks BOM import failed.");
-    const dxfNames = dxfEntries.map(entry => entry.path.split("/").pop());
-    let dxfHashes = [];
-    let hashWarning = "";
-    if (window.crypto?.subtle) {
+
+  button.disabled = true;
+  $("projectBatchStatus").textContent = "Generating Shop-format BOM workbooks…";
+
+  try {
+    // Generate each workbook in memory, then package all successful files into
+    // one ZIP. This avoids one browser download prompt per fixture.
+    const files = [];
+    const failed = [];
+
+    for (const tag of tags) {
       try {
-        dxfHashes = await Promise.all(dxfEntries.map(async entry => {
-          const bytes = await entry.file.arrayBuffer();
-          const digest = await window.crypto.subtle.digest("SHA-256", bytes);
-          return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
-        }));
+        loadFixture(tag);
+        const payload = {
+          customer:$("customer").value,
+          projectName:$("projectName").value,
+          poNumber:$("poNumber").value,
+          projectNumber:$("projectNumber").value,
+          fixtureTag:$("fixtureTag").value,
+          scheduleRowNumber:(schedule.find(item => item.tag === $("fixtureTag").value) || {}).no || "",
+          fixtureQuantity:$("fixtureQuantity").value,
+          fixtureDescription:$("fixtureDescription").value,
+          finish:[$("finish").value, $("finishDescription").value].filter(Boolean).join(" = "),
+          bomFilenameDescription:$("bomFilenameDescription").value,
+          shopFormat:true,
+          components:components.map(component => ({
+            itemNo:component.itemNo,
+            partNumber:component.partNumber,
+            quantityPerAssembly:component.quantityPerAssembly,
+            description:buildShopStandardExportDescription(component)
+          }))
+        };
+
+        const response = await fetch("/api/export-bom-xlsx", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.error || "Excel export failed.");
+        }
+
+        const blob = await response.blob();
+        const disposition = response.headers.get("Content-Disposition") || "";
+        const filenameMatch = disposition.match(/filename="([^"]+)"/i);
+        const filename = filenameMatch
+          ? filenameMatch[1]
+          : makeBomFilename().replace(/\.xlsx$/i, "") + " - Shop Standard.xlsx";
+
+        files.push({ filename, blob });
+
+        fixtureData[tag] = fixtureData[tag] || {};
+        fixtureData[tag].bomGenerated = true;
+        fixtureData[tag].shopBomGenerated = true;
+        fixtureData[tag].generatedAt = new Date().toISOString();
+        fixtureData[tag].includeInLaser = fixtureData[tag].includeInLaser !== false;
+        saveCurrentFixture();
       } catch (error) {
-        hashWarning = " DXF fingerprinting was unavailable (" + error.message + "); common-part detection will rely on explicit identities only.";
+        failed.push(tag + ": " + error.message);
       }
-    } else {
-      hashWarning = " Secure browser hashing is unavailable; common-part detection will rely on explicit identities only.";
     }
-    const dxfResponse = await fetch("/api/parse-dxf-list", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filenames: dxfNames.join("\n") })
-    });
-    const dxfResult = await dxfResponse.json();
-    if (!dxfResponse.ok) throw new Error(dxfResult.error || "DXF filename parsing failed.");
-    let pdfResult = { text: "", pageCount: 0 };
-    let pdfWarning = "";
-    try { pdfResult = await extractDrawingPdfText(pdfCandidates[0].file); }
-    catch (error) { pdfWarning = " PDF text extraction was unavailable (" + error.message + "); the drawing remains identified as a source reference."; }
-    loadFixture(tag);
-    bomLines = bomResult.components.map(line => ({ ...line, manual: false }));
-    dxfFiles = dxfResult.components.map((component, index) => ({ ...component, sha256: dxfHashes[index] || "" }));
-    drawingText = pdfResult.text;
-    $("dxfInput").value = dxfNames.join("\n");
-    rebuildComponents();
-    fixtureData[tag].bomGenerated = false;
-    fixtureData[tag].generatedAt = "";
-    fixtureData[tag].includeInLaser = true;
-    fixtureData[tag].sourceFiles = {
-      fixtureFolder: tag, drawingPdf: pdfCandidates[0].path,
-      solidworksBom: bomCandidates[0].path, dxfFolder: tag + "/DXF/",
-      dxfFilenames: dxfEntries.map(entry => entry.path)
-    };
-    fixtureData[tag].drawingText = drawingText;
-    saveCurrentFixture();
-    $("bomStatus").textContent = bomResult.count + " BOM item(s) read from " + bomCandidates[0].path + ".";
-    $("bomStatus").className = "ok";
-    $("parseStatus").textContent = dxfFiles.length + " DXF filenames read from " + tag + "/DXF/. DXF file contents were not uploaded.";
-    $("parseStatus").className = "ok";
-    $("fixtureSourcePaths").textContent = "Sources: PDF " + pdfCandidates[0].path + " · BOM " + bomCandidates[0].path + " · DXF " + tag + "/DXF/ (" + dxfEntries.length + " filenames).";
-    $("dxfFilenamePreview").value = dxfNames.join("\n");
-    $("dxfFilenameDetails").hidden = false;
-    $("drawingTextPreview").value = drawingText || "No extractable text layer was found. The PDF remains available as a local source file during this folder selection.";
-    $("drawingTextDetails").hidden = false;
-    status.textContent = "Folder validated. BOM: " + bomResult.count + " rows; DXF filenames: " + dxfEntries.length + "; PDF pages: " + (pdfResult.pageCount || "not extracted") + "." + pdfWarning + hashWarning;
-    status.className = pdfWarning ? "status-text" : "ok";
-    const unmatchedCount = components.filter(component => component.dxfIndex === "").length;
-    setFolderValidation({ bomDxf: true, pdf: true, pdfText: Boolean(drawingText) });
-    $("folderImportReview").textContent = "Source files validated. " + (components.length - unmatchedCount) +
-      " BOM item(s) matched automatically; " + unmatchedCount + " remain unmatched for review. Build the BOM Component Tree View when ready.";
-    $("folderImportReview").className = "ok";
-    $("buildComponentTreeBtn").disabled = false;
-    $("componentTreePanel").hidden = true;
+
+    if (!files.length) {
+      throw new Error("No BOM workbooks were generated.");
+    }
+
+    // JSZip is loaded only for batch export, so normal single-BOM operation
+    // does not need an additional application dependency.
+    const JSZip = (await import("https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm")).default;
+    const zip = new JSZip();
+    for (const file of files) zip.file(file.filename, file.blob);
+    const zipBlob = await zip.generateAsync({type:"blob", compression:"DEFLATE", compressionOptions:{level:6}});
+
+    const zipName = [
+      $("projectNumber").value || "Project",
+      "Shop-Format-BOMs"
+    ].join(" - ") + ".zip";
+
+    if ("showSaveFilePicker" in window) {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: zipName,
+        types: [{
+          description:"ZIP archive",
+          accept:{"application/zip":[".zip"]}
+        }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(zipBlob);
+      await writable.close();
+    } else {
+      const url = URL.createObjectURL(zipBlob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = zipName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    }
+
     renderSummary();
-    selectedFixtureFolderEntries = null;
-    selectedFixtureFolderName = "";
-    $("fixtureFolderInput").value = "";
+    $("projectBatchStatus").textContent =
+      "Shop-format batch export: " + files.length + " workbook(s) packaged into " + zipName +
+      (failed.length ? ". Failed: " + failed.join(" | ") : ". Choose the ZIP save location once.");
+    $("projectBatchStatus").className = failed.length ? "status-text" : "ok";
+  } catch (error) {
+    $("projectBatchStatus").textContent = error.name === "AbortError"
+      ? "ZIP save cancelled. The generated workbooks remain available to generate again."
+      : error.message;
+    $("projectBatchStatus").className = error.name === "AbortError" ? "status-text" : "error";
+  } finally {
+    button.disabled = false;
+  }
 }
+$("projectShopBtn").addEventListener("click", () => generateProjectBatch());
 
 $("buildComponentTreeBtn").addEventListener("click", () => {
   if (!components.length || $("buildComponentTreeBtn").disabled) return;
@@ -875,7 +1338,7 @@ $("componentRows").addEventListener("change", event => {
     !String(components[index].description || "").trim() ||
     components[index].descriptionDraft
   )) {
-    const draft = makeDraftDescription(components[index].partNumber, dxfFiles[components[index].dxfIndex]);
+    const draft = makeDraftDescription(components[index], dxfFiles[components[index].dxfIndex]);
     if (draft) {
       components[index].description = draft;
       components[index].descriptionDraft = true;
@@ -897,13 +1360,30 @@ $("componentRows").addEventListener("input", event => {
   components[index][input.dataset.componentField] = input.value;
   if (input.dataset.componentField === "description") {
     components[index].descriptionDraft = false;
+    components[index].descriptionOrigin = "manual";
+  } else if (components[index].descriptionDraft) {
+    // Keep the automatic BOM description synchronized as engineering values
+    // are entered. A manually edited description is never overwritten.
+    const matchedDxf = components[index].dxfIndex === "" || components[index].dxfIndex == null
+      ? null : dxfFiles[Number(components[index].dxfIndex)];
+    components[index].description = buildShopBomDescription(components[index], matchedDxf).description;
+    const componentRow = input.closest("tr").previousElementSibling;
+    const descriptionInput = componentRow?.querySelector('[data-component-field="description"]');
+    if (descriptionInput) descriptionInput.value = components[index].description;
   }
   const line = bomLines.find(entry =>
     entry.itemNo === components[index].itemNo && entry.partNumber === components[index].partNumber
   );
   if (line) {
     line[input.dataset.componentField] = input.value;
-    if (input.dataset.componentField === "description") line.descriptionDraft = false;
+    if (input.dataset.componentField === "description") {
+      line.descriptionDraft = false;
+      line.descriptionOrigin = "manual";
+    } else if (components[index].descriptionDraft) {
+      line.description = components[index].description;
+      line.descriptionDraft = true;
+      line.descriptionOrigin = "generated";
+    }
   }
   saveCurrentFixture();
 });
@@ -913,37 +1393,22 @@ $("componentRows").addEventListener("click", event => {
   if (buildButton) {
     const index = Number(buildButton.dataset.generateDescription);
     const component = components[index];
-    const value = key => String(component[key] ?? "").trim();
-    const type = value("componentType");
-    const gauge = value("gauge");
-    const process = value("manufacturingProcess");
-    const partId = value("partIdentification") || value("partNumber");
-    let description = "";
-    if (type === "Channel") {
-      description = [value("crossSectionDimensions"), gauge, "Chn'l", value("overallLength") ? "x " + value("overallLength") : "", process ? "(" + process + ")" : "", partId ? '"' + partId + '"' : "", value("pieceCount") ? "(Made in " + value("pieceCount") + "pcs.)" : "", value("pieceLengths") ? "(" + value("pieceLengths") + ")" : ""].filter(Boolean).join(" ");
-    } else if (type === "Angle") {
-      description = [value("crossSectionDimensions"), gauge, "Angle", value("overallLength") ? "x " + value("overallLength") : "", process ? "(" + process + ")" : "", partId ? '"' + partId + '"' : "", value("pieceCount") ? "(Made in " + value("pieceCount") + "pcs.)" : "", value("pieceLengths") ? "(" + value("pieceLengths") + ")" : ""].filter(Boolean).join(" ");
-    } else if (type === "Plate") {
-      description = [value("plateLength"), value("plateWidth") ? "x " + value("plateWidth") : "", gauge, "Plt.", process ? "(" + process + ")" : "", partId ? '"' + partId + '"' : ""].filter(Boolean).join(" ");
-    } else if (type === "Gusset") {
-      description = [value("geometryDimensions"), gauge, value("profileType"), value("additionalDimensions") ? "x " + value("additionalDimensions") : "", "Return Gusset", process ? "(" + process + ")" : ""].filter(Boolean).join(" ");
-    } else if (type === "Purchased hardware") {
-      description = [value("hardwareSize"), value("hardwareType"), value("hardwareLength") ? "x " + value("hardwareLength") : ""].filter(Boolean).join(" ");
-    } else {
-      description = [value("geometryDimensions"), gauge, type, value("overallLength"), process, partId].filter(Boolean).join(" — ");
-    }
-    if (!description.trim()) {
-      $("parseStatus").textContent = "Enter applicable manufacturing fields before building the description.";
-      $("parseStatus").className = "error";
-      return;
-    }
+    const matchedDxf = component.dxfIndex === "" || component.dxfIndex == null
+      ? null : dxfFiles[Number(component.dxfIndex)];
+    const result = buildShopBomDescription(component, matchedDxf);
+    const description = result.description;
     component.description = description;
-    component.descriptionDraft = false;
+    component.descriptionDraft = true;
+    component.descriptionOrigin = "generated";
     const line = bomLines.find(entry => entry.itemNo === component.itemNo && entry.partNumber === component.partNumber);
-    if (line) { line.description = description; line.descriptionDraft = false; }
+    if (line) {
+      line.description = description;
+      line.descriptionDraft = true;
+      line.descriptionOrigin = "generated";
+    }
     saveCurrentFixture();
     renderComponents();
-    $("parseStatus").textContent = "Description built for " + (component.partNumber || "component") + ". Review it before export.";
+    $("parseStatus").textContent = "Shop-format description refreshed for " + (component.partNumber || "component") + ". Review it before export.";
     $("parseStatus").className = "ok";
     return;
   }
@@ -979,10 +1444,13 @@ $("generateSummaryBtn").addEventListener("click", () => {
   $("summaryStatus").className = "ok";
 });
 
-$("exportBtn").addEventListener("click", async () => {
-  const button = $("exportBtn");
+async function exportBomWorkbook() {
+  const button = $("exportShopBtn");
   button.disabled = true;
-  $("parseStatus").textContent = "Generating Excel BOM…";
+  const status = $("bomExportStatus");
+  status.textContent = "Generating shop-format BOM Excel…";
+  status.className = "status-text";
+  $("parseStatus").textContent = "Generating shop-format Excel BOM…";
   $("parseStatus").className = "status-text";
 
   try {
@@ -997,11 +1465,12 @@ $("exportBtn").addEventListener("click", async () => {
       fixtureDescription:$("fixtureDescription").value,
       finish:[$("finish").value, $("finishDescription").value].filter(Boolean).join(" = "),
       bomFilenameDescription:$("bomFilenameDescription").value,
+      shopFormat:true,
       components:components.map(component => ({
         itemNo:component.itemNo,
         partNumber:component.partNumber,
         quantityPerAssembly:component.quantityPerAssembly,
-        description:component.description
+        description:buildShopStandardExportDescription(component)
       }))
     };
 
@@ -1019,7 +1488,8 @@ $("exportBtn").addEventListener("click", async () => {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = makeBomFilename();
+    const baseFilename = makeBomFilename().replace(/\.xlsx$/i, "");
+    anchor.download = baseFilename + " - Shop Standard.xlsx";
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
@@ -1028,19 +1498,24 @@ $("exportBtn").addEventListener("click", async () => {
     const missing = components.filter(component => !String(component.description || "").trim()).length;
     fixtureData[currentFixtureTag] = fixtureData[currentFixtureTag] || {};
     fixtureData[currentFixtureTag].bomGenerated = true;
+    fixtureData[currentFixtureTag].shopBomGenerated = true;
     fixtureData[currentFixtureTag].generatedAt = new Date().toISOString();
     fixtureData[currentFixtureTag].includeInLaser = fixtureData[currentFixtureTag].includeInLaser !== false;
     saveCurrentFixture();
     renderSummary();
-    $("summaryStatus").textContent = currentFixtureTag + " BOM Excel generated and marked complete.";
+    $("summaryStatus").textContent = currentFixtureTag + " Shop BOM Excel generated and marked complete.";
     $("summaryStatus").className = "ok";
-    $("parseStatus").textContent = "Excel BOM generated. " +
-      (missing ? missing + " description(s) are blank; review the workbook before release." : "All manufacturing descriptions are populated.");
+    status.textContent = "Shop-format BOM downloaded.";
+    status.className = "ok";
+    $("parseStatus").textContent = "Shop-format Excel BOM generated. " +
+      (missing ? missing + " description(s) are blank; review the workbook before release." : "Descriptions are populated.");
     $("parseStatus").className = missing ? "status-text" : "ok";
-    $("folderImportReview").textContent = currentFixtureTag + " BOM Excel file generated successfully." +
+    $("folderImportReview").textContent = currentFixtureTag + " Shop-format BOM Excel file generated successfully." +
       (missing ? " " + missing + " description(s) remain blank and need review." : "");
     $("folderImportReview").className = missing ? "status-text" : "ok";
   } catch (error) {
+    status.textContent = error.message;
+    status.className = "error";
     $("parseStatus").textContent = error.message;
     $("parseStatus").className = "error";
     $("folderImportReview").textContent = "BOM Excel generation failed: " + error.message;
@@ -1048,7 +1523,9 @@ $("exportBtn").addEventListener("click", async () => {
   } finally {
     button.disabled = components.length === 0;
   }
-});
+}
+
+$("exportShopBtn").addEventListener("click", () => exportBomWorkbook());
 
 
 function collectProjectBomData() {

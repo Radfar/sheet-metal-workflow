@@ -16,19 +16,19 @@
 <main class="layout">
   <section class="intro">
     <p class="eyebrow">WORKSPACE / BOM GENERATOR</p>
-    <h1>Build a manufacturing-ready BOM.</h1>
-    <p>Select a fixture folder, automatically read its SolidWorks BOM and DXF filenames, review the matched components, and generate the manufacturing BOM.</p>
+    <h1>Generate BOMs for an entire project.</h1>
+    <p>Select the project folder once. The application discovers each fixture unit and generates a separate Excel BOM for every imported unit.</p>
   </section>
   <p class="notice">Prototype data is held in this browser tab only and is not yet saved to a database. Export each BOM before refreshing or closing the page.</p>
 
   <section class="panel">
-    <div class="heading"><h2><b>01</b> Project & fixture selection</h2><small>Project reference</small></div>
+    <div class="heading"><h2><b>01</b> Project information & schedule</h2><small>Project reference</small></div>
     <div class="grid">
       <label>Project name<input id="projectName" value="Menlo Park"></label>
       <label>Store number<input id="projectNumber" value="2605"></label>
       <label>Customer<input id="customer" value="Aritzia"></label>
+      <label>Schedule reference<input id="scheduleReference" value="20260828_2605 Menlo Park_IFT Architectural"></label>
       <label>PO number (shared by all project BOMs)<input id="poNumber" value="" placeholder="Enter Menlo Park PO number"></label>
-      <label class="wide">Schedule reference<input id="scheduleReference" value="20260828_2605 Menlo Park_IFT Architectural"></label>
     </div>
     <div class="logo-upload-row">
       <label for="stellarLogoFile">Stellar logo (upload once; saved on this application)</label>
@@ -41,6 +41,8 @@
       <span id="radioButtonStatus" class="status-text">Loading saved image status…</span>
     </div>
 
+    <div hidden>
+    <button id="buildComponentTreeBtn" type="button" disabled>Legacy component tree</button>
     <div class="fixture-picker">
       <label for="fixtureSelect">Fixture tag</label>
       <select id="fixtureSelect"></select>
@@ -54,12 +56,13 @@
         <tbody id="selectedScheduleRow"><tr><td colspan="8" class="empty">No fixture selected.</td></tr></tbody>
       </table>
     </div>
+    </div>
 
     <details class="schedule-editor">
       <summary>Edit full project schedule (all fixtures)</summary>
       <div class="table-wrap">
         <table class="schedule-table">
-          <thead><tr><th>#</th><th>Tag</th><th>Mounting</th><th>Height AFF</th><th>Rod length / Profile</th><th>Trough Width</th><th>Trough Length</th><th>Finish</th><th>Qty</th></tr></thead>
+          <thead><tr><th>#</th><th>Tag</th><th>Mounting</th><th>Height AFF</th><th>Rod length / Profile</th><th>Trough Width</th><th>Trough Length</th><th>Finish</th><th>Qty</th><th>Action</th></tr></thead>
           <tbody id="scheduleRows"></tbody>
         </table>
       </div>
@@ -70,7 +73,7 @@
     </details>
   </section>
 
-  <section class="panel">
+  <section class="panel" hidden>
     <div class="heading"><h2><b>02</b> Selected fixture details</h2><small id="currentFixtureLabel">No fixture loaded</small></div>
     <div class="grid">
       <label>Fixture tag<input id="fixtureTag" readonly></label>
@@ -83,12 +86,12 @@
   </section>
 
     <section class="panel" id="fixtureFolderPanel">
-    <div class="heading"><h2><b>03</b> Fixture folder import</h2><small>Automatic source discovery</small></div>
-    <p class="notice">Select the fixture folder named exactly like its schedule tag (for example, <strong>T01A</strong>). It must contain <strong>T01A.pdf</strong>, <strong>T01A.xls</strong> or <strong>T01A.xlsx</strong>, and an uppercase <strong>DXF</strong> subfolder. The folder is read locally in your browser. Only the SolidWorks BOM workbook is sent to the local application server. DXF files are fingerprinted locally for exact byte-for-byte comparison; their contents are never uploaded.</p>
+    <div class="heading"><h2><b>02</b> Select project source folder</h2><small>Automatic source discovery</small></div>
+    <p class="notice">Select the parent folder containing fixture folders such as <strong>T01A</strong>, <strong>T01B</strong>, and <strong>T01C</strong>. Each fixture folder should contain its SolidWorks BOM workbook, drawing PDF, and a <strong>DXF</strong> subfolder. An optional <strong>Excel</strong> folder may contain previous exports; those workbooks are not treated as source BOMs. The folder is read locally in your browser. Only the SolidWorks BOM workbook is sent to the local application server. DXF files are fingerprinted locally for exact byte-for-byte comparison; their contents are never uploaded.</p>
     <div class="file-actions folder-picker-actions">
-      <button id="chooseFixtureFolderBtn" class="secondary" type="button">Choose Folder</button>
+      <button id="chooseFixtureFolderBtn" class="secondary" type="button">Choose Project Folder</button>
       <input id="fixtureFolderInput" type="file" webkitdirectory directory multiple hidden>
-      <span id="fixtureFolderStatus" class="status-text">Select the current fixture folder.</span>
+      <span id="fixtureFolderStatus" class="status-text">Select the project root folder containing all fixture folders.</span>
     </div>
     <div class="folder-validation">
       <div id="folderBomDxfCheck" class="folder-check pending">✓ <span>SolidWorks BOM and DXF files discovered from the selected folder</span></div>
@@ -100,10 +103,9 @@
       <summary>Extracted drawing PDF text (reference only)</summary>
       <textarea id="drawingTextPreview" rows="8" readonly></textarea>
     </details>
-    <div class="actions">
-      <button id="buildComponentTreeBtn" type="button" disabled>Build BOM Component Tree View</button>
-      <span id="folderImportReview" class="status-text">After source files are read and matched, build the component tree for review.</span>
-    </div>
+    <p id="folderImportReview" class="status-text">Each discovered fixture folder will be validated separately. Missing or ambiguous files will be reported.</p>
+  </section>
+
   </section>
 
   <section class="panel" hidden>
@@ -128,7 +130,7 @@
 
   <section class="panel compact-panel" id="componentTreePanel" hidden>
     <div class="heading"><h2><b>05</b> BOM Component Tree View</h2><small id="rowCount">0 components</small></div>
-    <p class="notice">SolidWorks controls part numbers and quantities. Expand “Manufacturing data” under each component to enter material, gauge, finished geometry, process, piece splitting, hardware specifications and drawing references. Build or edit the final BOM description after entering the verified values.</p>
+    <p class="notice">SolidWorks controls part numbers and quantities. DXF files are used for matching, material/flat-size reference and the consolidated Laser Order Request. Expand “Manufacturing data” to enter verified finished-part dimensions, gauge, component type and optional manufacturing process. The Shop-Standard export follows the approved shop naming and formatting rules. DXF dimensions and material codes are not appended to or substituted into the shop description; unknown values are omitted rather than guessed.</p>
     <div class="table-wrap">
       <table class="component-table">
         <thead><tr><th>Item</th><th>Part number</th><th>Qty / fixture</th><th>DXF match</th><th>Material</th><th>Flat size</th><th>Manufacturing description (BOM output)</th><th></th></tr></thead>
@@ -137,24 +139,31 @@
     </div>
     <div class="actions spread">
       <button id="addRowBtn" class="secondary" type="button">Add BOM item manually</button>
-      <button id="exportBtn" disabled type="button">Generate BOM Excel File</button>
+      <div class="export-actions">
+        <button id="exportShopBtn" class="secondary" disabled type="button">Generate BOM Excel</button>
+      </div>
     </div>
+    <p id="bomExportStatus" class="status-text">DXF files remain available for matching and Laser Order Request generation. The Shop-Standard export uses the verified manufacturing data.</p>
   </section>
 
   <section class="panel">
-    <div class="heading"><h2><b>06</b> Project schedule summary</h2><small>Final review</small></div>
-    <div class="actions"><button id="generateSummaryBtn" type="button">Generate project summary</button><span id="summaryStatus" class="status-text">No summary generated yet.</span></div>
+    <div class="heading"><h2><b>03</b> Project schedule summary</h2><small>Import and export status</small></div>
+    <div class="actions"><button id="generateSummaryBtn" type="button" hidden>Legacy summary refresh</button><span id="summaryStatus" class="status-text">Select a project folder to populate the schedule summary.</span></div>
     <div class="table-wrap summary-wrap">
       <table class="summary-table">
-        <thead><tr><th>#</th><th>Tag</th><th>Mounting</th><th>Profile</th><th>Width</th><th>Length</th><th>Finish</th><th>Qty</th><th>BOM items</th><th>Generated</th><th>Include in Laser Order</th></tr></thead>
-        <tbody id="summaryRows"><tr><td colspan="11" class="empty">Generated fixture BOMs will appear here.</td></tr></tbody>
+        <thead><tr><th>#</th><th>Tag</th><th>Mounting</th><th>Profile</th><th>Width</th><th>Length</th><th>Finish</th><th>Qty</th><th>BOM items</th><th>Import status</th><th>Shop BOM</th><th>Include in Laser Order</th></tr></thead>
+        <tbody id="summaryRows"><tr><td colspan="13" class="empty">Select a project folder to discover fixture units.</td></tr></tbody>
       </table>
+    </div>
+    <div id="projectBatchActions" class="actions project-batch-actions" hidden>
+      <button id="projectShopBtn" class="secondary" type="button">Generate BOM Excel</button>
+      <span id="projectBatchStatus" class="status-text">No fixture folders imported yet.</span>
     </div>
   </section>
 
 
   <section class="panel">
-    <div class="heading"><h2><b>07</b> Consolidated Laser Order Request</h2><small>Project-level production output</small></div>
+    <div class="heading"><h2><b>04</b> Consolidated Laser Order Request</h2><small>Project-level production output</small></div>
     <p class="notice">Generate from any fixture BOMs marked as generated in the Project Schedule Summary. Select the fixtures to include there. Quantities are calculated from Qty / fixture × fixture production quantity. Exact DXF filenames are consolidated by default. If two fixture-specific DXFs are confirmed identical, enter the same approved common DXF identity in their Manufacturing data before consolidation.</p>
     <div class="grid">
       <label>Laser order number<input id="laserOrderNumber" placeholder="e.g. RA-5075"></label>
@@ -174,8 +183,8 @@
       </table>
     </div>
   </section>
-  <footer>V0.5.0 · Draft engineering data only · Manufacturing descriptions require engineering review</footer>
+  <footer>V0.6.0 · Project-root batch workflow · Draft engineering data only · Review before production release</footer>
 </main>
-<script src="/js/app.js"></script>
+<script type="module" src="/js/app.js"></script>
 </body>
 </html>
