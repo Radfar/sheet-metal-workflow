@@ -117,14 +117,14 @@ function parsePdfDimensionToken(raw) {
   const value = String(raw || "").trim().replace(/″/g, '"');
   if (!value) return null;
 
-  const mixed = value.match(/^(\\d+)\\s+(\\d+)\\/(\\d+)$/);
+  const mixed = value.match(/^(\d+)(\s+)(\d+)\/\(\d+)$/);
   if (mixed) {
-    const denominator = Number(mixed[3]);
+    const denominator = Number(mixed[4]);
     if (!denominator) return null;
-    return Number(mixed[1]) + Number(mixed[2]) / denominator;
+    return Number(mixed[1]) + Number(mixed[3]) / denominator;
   }
 
-  const fraction = value.match(/^(\\d+)\\/(\\d+)$/);
+  const fraction = value.match(/^(\d+)\/\(\d+)$/);
   if (fraction) {
     const denominator = Number(fraction[2]);
     if (!denominator) return null;
@@ -136,14 +136,11 @@ function parsePdfDimensionToken(raw) {
 }
 
 function extractPdfDimensions(text) {
-  const source = String(text || "")
-    .replace(/\\r/g, "")
-    .replace(/\\u00a0/g, " ");
-
+  const source = String(text || "").replace(/\r/g, "").replace(/\u00a0/g, " ");
   const values = [];
-  const mixedFractionPattern = /\\b\\d+\\s+\\d+\\/\\d+\\b/g;
-  const fractionPattern = /\\b\\d+\\/\\d+\\b/g;
-  const decimalPattern = /\\b\\d+(?:\\.\\d+)\\b/g;
+  const mixedFractionPattern = /\b\d+\s+\d+\/\d+\b/g;
+  const fractionPattern = /\b\d+\/\d+\b/g;
+  const decimalPattern = /\b\d+(?:\.\d+)\b/g;
 
   for (const match of source.matchAll(mixedFractionPattern)) {
     const value = parsePdfDimensionToken(match[0]);
@@ -191,6 +188,7 @@ function findPdfComponentContexts(pdfPages, componentLabel) {
 
   return contexts;
 }
+
 function pdfComponentDimensionEvidence(pdfPages, componentLabel, value) {
   const target = Number(value);
   if (!Number.isFinite(target)) return { matched: false, pages: [], contextCount: 0 };
@@ -206,7 +204,6 @@ function pdfComponentDimensionEvidence(pdfPages, componentLabel, value) {
     contextCount: contexts.length
   };
 }
-
 function pdfContainsLabel(text, label) {
   const source = normalize(text);
   const tokens = normalize(label).split(" ").filter(token => token.length > 1);
