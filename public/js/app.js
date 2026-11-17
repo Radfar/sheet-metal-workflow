@@ -15,6 +15,7 @@ let selectedFixtureFolderName = "";
 let selectedProjectRootName = "";
 let importedProjectTags = [];
 let discoveredProjectTags = [];
+let projectImportInProgress = false;
 
 
 function makeBomFilename() {
@@ -632,6 +633,7 @@ function renderSummary() {
   if (!discoveredProjectTags.length) {
     $("summaryRows").innerHTML = '<tr><td colspan="13" class="empty">Select a project folder to discover fixture units.</td></tr>';
     updateLaserOrderButtonState();
+    updateProjectBatchButtonState();
     return;
   }
 
@@ -653,6 +655,21 @@ function renderSummary() {
       ' in Laser Order Request"></td></tr>';
   }).join("");
   updateLaserOrderButtonState();
+  updateProjectBatchButtonState();
+}
+function updateProjectBatchButtonState() {
+  const allFixturesReady = discoveredProjectTags.length > 0 &&
+    importedProjectTags.length === discoveredProjectTags.length &&
+    discoveredProjectTags.every(tag => {
+      const saved = fixtureData[tag];
+      return importedProjectTags.includes(tag) &&
+        Array.isArray(saved?.components) && saved.components.length > 0 &&
+        Boolean(saved?.sourceFiles?.solidworksBom) &&
+        Boolean(saved?.sourceFiles?.drawingPdf) &&
+        Array.isArray(saved?.sourceFiles?.dxfFilenames) && saved.sourceFiles.dxfFilenames.length > 0;
+    });
+  $("projectShopBtn").disabled = projectImportInProgress || !allFixturesReady;
+  return allFixturesReady;
 }
 function updateLaserOrderButtonState() {
   const hasSelectedGeneratedBom = schedule.some(item => {
@@ -1189,6 +1206,10 @@ async function importFixtureFolder(folderTag, providedEntries) {
 }
 
 async function importProjectRoot(entries, rootName) {
+  projectImportInProgress = true;
+  $("projectShopBtn").disabled = true;
+  $("projectBatchActions").hidden = true;
+  $("projectBatchStatus").textContent = "Importing fixture folders and preparing BOM data…";
   importedProjectTags = [];
   discoveredProjectTags = [];
   $("projectBatchActions").hidden = true;
@@ -1217,8 +1238,12 @@ async function importProjectRoot(entries, rootName) {
     importedProjectTags.join(", ") + (failures.length ? ". Attention: " + failures.join(" | ") : "") +
     ". Generate one Excel BOM per imported fixture.";
   $("folderImportReview").className = failures.length ? "status-text" : "ok";
-  $("projectBatchActions").hidden = importedProjectTags.length === 0;
-  $("projectBatchStatus").textContent = importedProjectTags.length + " fixture unit(s) ready for batch export.";
+  projectImportInProgress = false;
+  const allFixturesReady = updateProjectBatchButtonState();
+  $("projectBatchActions").hidden = discoveredProjectTags.length === 0;
+  $("projectBatchStatus").textContent = allFixturesReady
+    ? importedProjectTags.length + " fixture unit(s) fully imported. Batch BOM export is ready."
+    : importedProjectTags.length + " of " + discoveredProjectTags.length + " fixture folder(s) imported. Resolve all import issues before generating the batch BOM ZIP.";
   if (failures.length) console.warn("Project folder import issues:", failures);
 }
 
@@ -1228,15 +1253,22 @@ $("chooseFixtureFolderBtn").addEventListener("click", async () => {
     return;
   }
   resetFolderValidation("Select the project root folder containing all fixture-unit folders…");
+  projectImportInProgress = true;
+  updateProjectBatchButtonState();
+  $("projectBatchStatus").textContent = "Waiting for project folder selection…";
   try {
     const handle = await window.showDirectoryPicker({ mode: "read" });
     $("fixtureFolderStatus").textContent = "Reading project folder " + handle.name + "…";
     $("fixtureFolderStatus").className = "status-text";
     await importProjectRoot(await readSelectedDirectory(handle), handle.name);
   } catch (error) {
+    projectImportInProgress = false;
+    updateProjectBatchButtonState();
     if (error.name !== "AbortError") {
       $("fixtureFolderStatus").textContent = error.message;
       $("fixtureFolderStatus").className = "error";
+      $("projectBatchStatus").textContent = "Project folder import failed. Correct the folder structure and import again.";
+      $("projectBatchStatus").className = "error";
       resetFolderValidation("Project folder import failed. Check the folder structure.");
     }
   }
@@ -1251,21 +1283,48 @@ $("fixtureFolderInput").addEventListener("change", async () => {
     file,
     path: String(file.webkitRelativePath || file.name).replace(/\\\\/g, "/")
   }));
+  projectImportInProgress = true;
+  updateProjectBatchButtonState();
+  $("projectBatchStatus").textContent = "Reading project folder " + rootName + "…";
   $("fixtureFolderStatus").textContent = "Reading project folder " + rootName + "…";
   $("fixtureFolderStatus").className = "status-text";
   try {
     await importProjectRoot(entries, rootName);
   } catch (error) {
+    projectImportInProgress = false;
+    updateProjectBatchButtonState();
     $("fixtureFolderStatus").textContent = error.message;
     $("fixtureFolderStatus").className = "error";
+    $("projectBatchStatus").textContent = "Project folder import failed. Correct the folder structure and import again.";
+    $("projectBatchStatus").className = "error";
     resetFolderValidation("Project folder import failed. Check the folder structure.");
   } finally {
     $("fixtureFolderInput").value = "";
   }
 });
 
-async function generateProjectBatch() {
+function requestProjectZipSavePicker() {
+  if (!("showSaveFilePicker" in window)) return Promise.resolve({ handle: null });
+  try {
+    // This function is called synchronously by the button click handler so
+    // the browser still recognizes the request as a user-initiated action.
+    return window.showSaveFilePicker({
+      suggestedName: [ $("projectNumber").value || "Project", "Shop-Format-BOMs" ].join(" - ") + ".zip",
+      types: [{ description:"ZIP archive", accept:{"application/zip":[".zip"]} }]
+    }).then(handle => ({ handle }), error => ({ error }));
+  } catch (error) {
+    return Promise.resolve({ error });
+  }
+}
+
+async function generateProjectBatch(savePickerResult) {
   const button = $("projectShopBtn");
+  const allFixturesReady = updateProjectBatchButtonState();
+  if (!allFixturesReady || projectImportInProgress) {
+    $("projectBatchStatus").textContent = "Batch BOM export is unavailable until every discovered fixture folder has been imported successfully.";
+    $("projectBatchStatus").className = "error";
+    return;
+  }
   const tags = schedule.map(item => item.tag).filter(tag =>
     importedProjectTags.includes(tag) && fixtureData[tag]?.components?.length
   );
@@ -1354,15 +1413,10 @@ async function generateProjectBatch() {
       "Shop-Format-BOMs"
     ].join(" - ") + ".zip";
 
-    if ("showSaveFilePicker" in window) {
-      const handle = await window.showSaveFilePicker({
-        suggestedName: zipName,
-        types: [{
-          description:"ZIP archive",
-          accept:{"application/zip":[".zip"]}
-        }]
-      });
-      const writable = await handle.createWritable();
+    const pickerResult = await savePickerResult;
+    if (pickerResult?.error) throw pickerResult.error;
+    if (pickerResult?.handle) {
+      const writable = await pickerResult.handle.createWritable();
       await writable.write(zipBlob);
       await writable.close();
     } else {
@@ -1390,7 +1444,11 @@ async function generateProjectBatch() {
     button.disabled = false;
   }
 }
-$("projectShopBtn").addEventListener("click", () => generateProjectBatch());
+$("projectShopBtn").addEventListener("click", () => {
+  if ($("projectShopBtn").disabled) return;
+  const savePickerResult = requestProjectZipSavePicker();
+  generateProjectBatch(savePickerResult);
+});
 
 $("buildComponentTreeBtn").addEventListener("click", () => {
   if (!components.length || $("buildComponentTreeBtn").disabled) return;
