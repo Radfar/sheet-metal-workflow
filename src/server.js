@@ -532,8 +532,8 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
 
         // The SolidWorks BOM may identify this purchased hardware simply as "NUT".
         // Standardize that exact item identity in the exported BOM description.
-        const isGenericNut = !component.purchasedItem &&
-          (partNumber.toUpperCase() === "NUT" || description.toUpperCase() === "NUT");
+        const isGenericNut =
+          partNumber.toUpperCase() === "NUT" || description.toUpperCase() === "NUT";
         if (isGenericNut) {
           descriptionCell.value = "10-32 HEX NYLOCK NUT (PAINT TO MATCH)";
         } else if (component.purchasedItem) {
