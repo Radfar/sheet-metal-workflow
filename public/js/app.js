@@ -104,7 +104,7 @@ function renderPdfAnalysis() {
 
   $("pdfAnalysisStatus").textContent = pdfsLoaded.length
     ? pdfsLoaded.length + " of " + scopedSchedule.length + " fixture PDFs loaded (schedule entries through T14; T15–T17 excluded); " + imported.length + " parsed into page records; " + textExtracted + " contain extractable text. " +
-      candidateRows.length + " possible purchased-item reference(s) found. All candidates require manual verification; none are added to the BOM."
+      candidateRows.length + " purchased-item reference(s) found. Detected candidates are appended to Shop BOM exports after a blank separator row; review descriptions and quantities before release."
     : "Import the project folder to analyze drawing PDFs through T14 (excluding T15–T17).";
   $("pdfPageCheckRows").innerHTML = pageRows.length
     ? pageRows.join("")
@@ -112,6 +112,23 @@ function renderPdfAnalysis() {
   $("pdfPurchasedRows").innerHTML = candidateRows.length
     ? candidateRows.join("")
     : '<tr><td colspan="6" class="empty">No purchased-item candidates detected yet. This does not prove that the drawings contain no purchased items.</td></tr>';
+}
+
+function getPurchasedItemsForFixture(tag) {
+  const savedPages = fixtureData[tag]?.drawingPages || (tag === currentFixtureTag ? drawingPages : []);
+  if (!savedPages.length) return [];
+  return analyzeDrawingPages(savedPages, tag).purchasedItems.map((candidate, index) => {
+    const quantityMatch = String(candidate.quantity || "").match(/^\s*(\d+(?:\.\d+)?)/);
+    return {
+      itemNo: "P" + (index + 1),
+      description: candidate.description,
+      quantityPerAssembly: quantityMatch ? Number(quantityMatch[1]) : "",
+      quantityUnit: String(candidate.quantity || "").replace(/^\s*\d+(?:\.\d+)?\s*/, "").trim(),
+      pageNumber: candidate.pageNumber,
+      confidence: candidate.confidence,
+      evidence: candidate.evidence
+    };
+  });
 }
 
 function normalizePart(value, fixtureTag) {
@@ -1292,7 +1309,8 @@ async function generateProjectBatch() {
             partNumber:component.partNumber,
             quantityPerAssembly:component.quantityPerAssembly,
             description:buildShopStandardExportDescription(component)
-          }))
+          })),
+          purchasedItems:getPurchasedItemsForFixture(tag)
         };
 
         const response = await fetch("/api/export-bom-xlsx", {
@@ -1556,7 +1574,8 @@ async function exportBomWorkbook() {
         partNumber:component.partNumber,
         quantityPerAssembly:component.quantityPerAssembly,
         description:buildShopStandardExportDescription(component)
-      }))
+      })),
+      purchasedItems:getPurchasedItemsForFixture(currentFixtureTag)
     };
 
     const response = await fetch("/api/export-bom-xlsx", {
