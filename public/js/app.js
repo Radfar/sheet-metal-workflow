@@ -361,31 +361,10 @@ function buildShopStandardExportDescription(component) {
         name = "";
         description = [dimensions, gauge, "Plt.", "(Laser)", name].filter(Boolean).join(" ");
       } else if (isGusset) {
-        // Gusset descriptions contain the three geometry dimensions before
-        // the gauge and the two return dimensions after "Chn'l x".
-        // Keep those dimension groups distinct in the shop description.
-        const gaugeIndex = description.search(/\b(?:16|11)GA\./i);
-        const gussetGauge = gaugeIndex >= 0
-          ? description.match(/\b(?:16|11)GA\./i)[0]
-          : gauge;
-        const geometry = gaugeIndex >= 0
-          ? description.slice(0, gaugeIndex).trim()
-          : dimensions;
-        let returnDimensions = gaugeIndex >= 0
-          ? description.slice(gaugeIndex + gussetGauge.length).trim()
-          : "";
-        returnDimensions = returnDimensions
-          .replace(/^\s*(?:(?:Chn'l|Channel)\s*)?x\s*/i, "")
-          .replace(/\bReturn\s+Gusset\b|\bGusset\b/gi, "")
-          .replace(/\s+/g, " ").trim();
-        description = [
-          geometry,
-          gussetGauge,
-          "Chn'l",
-          returnDimensions ? "x " + returnDimensions : "",
-          "Return Gusset",
-          "(Laser/SM)"
-        ].filter(Boolean).join(" ");
+        // All Gussets are one standardized common part across the project.
+        // Ignore source dimensions and the SolidWorks part number in the
+        // Shop-Standard description; use the approved fixed description.
+        description = "1 3/4\" x 8 13/16\" x 1 3/4\" 16GA. Chn'l x 6 1/16\" & 1 3/4\" Return Gusset (Laser/SM)";
       } else if (isShortAngle) {
         description = [dimensions, gauge, "(Laser/SM)", name].filter(Boolean).join(" ");
       } else {
