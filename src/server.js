@@ -529,27 +529,19 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           // Keep the suffix as a separate trailing segment so the export order is:
           // description + process + quoted part number + manufacturing suffix.
           const suffixMatch = description.match(/\s*(\(Made in \d+pcs\.\)\s*\([^)]*\))\s*$/i);
-          // A channel with a 24 3/16-inch second flat-pattern dimension uses
-          // the approved 7 11/16 x 9 x 7 11/16 channel profile. This is a
-          // dimensional rule, not a fixture-tag or part-number exception.
+          // Apply the standard profile only to fixture channel part numbers
+          // in the Txx-y format (for example, T08-E2), not to every channel
+          // that happens to share a flat-pattern dimension.
           const channelDimensionsMatch = description.match(
             /(?:flat\s*pattern\s*)?(\d+(?:\s+\d+\/\d+|\.\d+)?)"\s*[xX]\s*(\d+(?:\s+\d+\/\d+|\.\d+)?)"/i
           );
           const isChannelDescription = /\bCHANNEL\b|\bCHN['’]?L\b/i.test(description);
-          const toInches = value => {
-            const fraction = String(value).trim().match(/^(\d+)(?:\s+(\d+)\/(\d+))?$/);
-            if (fraction) {
-              return Number(fraction[1]) +
-                (fraction[2] ? Number(fraction[2]) / Number(fraction[3]) : 0);
-            }
-            const decimal = Number(value);
-            return Number.isFinite(decimal) ? decimal : null;
-          };
+          const isFixtureChannelPart = /^T\d{2}-[A-Z]\d+$/i.test(partNumber);
           const channelGauge = description.match(/\b\d+GA\./i)?.[0]?.toUpperCase() || "";
           const isStandardProfileChannel = Boolean(
             isChannelDescription &&
+            isFixtureChannelPart &&
             channelDimensionsMatch &&
-            Math.abs(toInches(channelDimensionsMatch[2]) - 24.1875) < 1e-8 &&
             channelGauge
           );
           const manufacturingSuffix = isStandardProfileChannel
