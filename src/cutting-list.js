@@ -281,7 +281,9 @@ export async function buildCuttingListWorkbook(payload = {}) {
     ws.getCell(section.headingRow, 2).value = null;
     for (let row = section.firstRow; row <= section.lastRow; row++) {
       ws.getRow(row).hidden = false;
-      for (const column of [1, 2, 8, 9, 10, 11]) {
+      // Clear both the left-hand (COMMON / 16GA) and right-hand (11GA)
+      // data blocks so values from the template or a prior export cannot remain.
+      for (const column of [1, 2, 3, 4, 5, 6, 8, 9, 10, 11]) {
         ws.getCell(row, column).value = null;
       }
     }
@@ -311,14 +313,20 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
     ws.getCell(layout.headingRow, 2).value = sectionHeadingText({ ...layout, key: section.key }, payload);
 
+    // The original LOR template uses two distinct data blocks:
+    // COMMON / 16GA on the left (B:F), and 11GA on the right (H:K).
+    const columns = section.key === "gauge11"
+      ? { filename: 2, material: 8, gauge: 9, quantity: 10, finish: 11 }
+      : { filename: 2, material: 3, gauge: 4, quantity: 5, finish: 6 };
+
     lines.forEach((line, index) => {
       const row = layout.firstRow + index;
       ws.getCell(row, 1).value = index + 1;
-      ws.getCell(row, 2).value = line.dxfFilename;
-      ws.getCell(row, 8).value = line.material;
-      ws.getCell(row, 9).value = line.gauge;
-      ws.getCell(row, 10).value = line.quantity;
-      ws.getCell(row, 11).value = line.finish;
+      ws.getCell(row, columns.filename).value = line.dxfFilename;
+      ws.getCell(row, columns.material).value = line.material;
+      ws.getCell(row, columns.gauge).value = line.gauge;
+      ws.getCell(row, columns.quantity).value = line.quantity;
+      ws.getCell(row, columns.finish).value = line.finish;
     });
 
     for (let row = layout.firstRow + lines.length; row <= layout.lastRow; row++) {
