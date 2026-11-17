@@ -440,7 +440,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           // Manufacturing suffixes belong after the quoted SolidWorks part number.
           // Keep the suffix as a separate trailing segment so the export order is:
           // description + process + quoted part number + manufacturing suffix.
-          const suffixMatch = description.match(/\\s*(\\(Made in \\d+pcs\\.\\)\\s*\\([^)]*\\))\\s*$/i);
+          const suffixMatch = description.match(/\s*(\(Made in \d+pcs\.\)\s*\([^)]*\))\s*$/i);
           const manufacturingSuffix = suffixMatch ? suffixMatch[1] : "";
           const descriptionBody = suffixMatch
             ? description.slice(0, suffixMatch.index).trimEnd()
