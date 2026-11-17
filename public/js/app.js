@@ -1249,13 +1249,14 @@ async function importProjectRoot(entries, rootName) {
 
 $("chooseFixtureFolderBtn").addEventListener("click", async () => {
   $("projectBatchActions").hidden = false;
-  projectImportInProgress = true;
-  updateProjectBatchButtonState();
-  $("projectBatchStatus").textContent = "Waiting for project folder selection…";
   if (!("showDirectoryPicker" in window)) {
+    $("projectBatchStatus").textContent = "Choose the project root folder to begin importing fixture data…";
     $("fixtureFolderInput").click();
     return;
   }
+  projectImportInProgress = true;
+  updateProjectBatchButtonState();
+  $("projectBatchStatus").textContent = "Waiting for project folder selection…";
   resetFolderValidation("Select the project root folder containing all fixture-unit folders…");
   try {
     const handle = await window.showDirectoryPicker({ mode: "read" });
