@@ -121,6 +121,7 @@ function getPurchasedItemsForFixture(tag) {
     const quantityMatch = String(candidate.quantity || "").match(/^\s*(\d+(?:\.\d+)?)/);
     return {
       itemNo: "P" + (index + 1),
+      purchasedItem: true,
       description: candidate.description,
       quantityPerAssembly: quantityMatch ? Number(quantityMatch[1]) : "",
       quantityUnit: String(candidate.quantity || "").replace(/^\s*\d+(?:\.\d+)?\s*/, "").trim(),
