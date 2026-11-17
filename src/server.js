@@ -392,8 +392,8 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
     const classifyBomGroup = component => {
       const source = [component.partNumber, component.description, component.componentType]
         .filter(Boolean).join(" ").toUpperCase();
-      if (/SHORT[\\s_-]*ANG|\\bANGLE\\b|\\bANG\\b|[-_]ANG(?:[-_\\d]|$)/i.test(source)) return "angles";
-      if (/\\bCHANNEL\\b|\\bCHN['’]?L\\b|\\bTROUGH\\b/i.test(source)) return "channels";
+      if (/SHORT[\s_-]*ANG|\bANGLE\b|\bANG\b|[-_]ANG(?:[-_\d]|$)/i.test(source)) return "angles";
+      if (/\bCHANNEL\b|\bCHN['’]?L\b|\bTROUGH\b/i.test(source)) return "channels";
       return "common";
     };
     const groupedComponents = {
