@@ -211,6 +211,59 @@ function findPdfComponentContexts(pdfPages, componentLabel) {
   return contexts;
 }
 
+function geometryDimensionsInches(geometry) {
+  if (!geometry?.extents || !Number.isFinite(geometry.units?.toInches)) return null;
+  return [
+    Math.abs(geometry.extents.maxX - geometry.extents.minX) * geometry.units.toInches,
+    Math.abs(geometry.extents.maxY - geometry.extents.minY) * geometry.units.toInches
+  ];
+}
+
+function dimensionPairMatches(a, b, tolerance = 0.02) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== 2 || b.length !== 2) return false;
+  const first = [...a].sort((x, y) => x - y);
+  const second = [...b].sort((x, y) => x - y);
+  return numbersClose(first[0], second[0], tolerance) && numbersClose(first[1], second[1], tolerance);
+}
+
+function extractPdfComponentDimensionValues(pdfPages, componentLabel) {
+  const contexts = findPdfComponentContexts(pdfPages, componentLabel);
+  const values = [];
+  for (const context of contexts) {
+    for (const item of extractPdfDimensions(context.text)) {
+      if (!values.some(existing => numbersClose(existing.value, item.value, 0.001))) {
+        values.push({ ...item, pageNumber: context.pageNumber });
+      }
+    }
+  }
+  return values;
+}
+
+function findClosestPdfDimensionPair(pdfPages, componentLabel, targetPair) {
+  if (!Array.isArray(targetPair) || targetPair.length !== 2) return null;
+  const candidates = extractPdfComponentDimensionValues(pdfPages, componentLabel)
+    .filter(item => item.value > 1);
+  let best = null;
+
+  for (let i = 0; i < candidates.length; i++) {
+    for (let j = i + 1; j < candidates.length; j++) {
+      const pair = [candidates[i].value, candidates[j].value];
+      const sortedPair = [...pair].sort((a, b) => a - b);
+      const sortedTarget = [...targetPair].sort((a, b) => a - b);
+      const score = Math.abs(sortedPair[0] - sortedTarget[0]) + Math.abs(sortedPair[1] - sortedTarget[1]);
+      if (!best || score < best.score) {
+        best = {
+          pair,
+          score,
+          pages: [...new Set([candidates[i].pageNumber, candidates[j].pageNumber])]
+        };
+      }
+    }
+  }
+
+  return best;
+}
+
 function pdfComponentDimensionEvidence(pdfPages, componentLabel, value) {
   const target = Number(value);
   if (!Number.isFinite(target)) return { matched: false, pages: [], contextCount: 0 };
@@ -327,12 +380,51 @@ export async function auditDxfFiles(dxfEntries, dxfMetadata, pdfPages, fixtureTa
     if (geometry.warning) {
       fileChecks.push(makeCheck("WARNING", geometry.warning));
     } else {
-      fileChecks.push(makeCheck(
-        "OK",
-        geometry.geometryEntityCount + " geometry entity/entities parsed; extents " +
-        geometry.extents.minX.toFixed(3) + "–" + geometry.extents.maxX.toFixed(3) +
-        " × " + geometry.extents.minY.toFixed(3) + "–" + geometry.extents.maxY.toFixed(3) + "."
-      ));
+      const geometryDimsInches = geometryDimensionsInches(geometry);
+      const geometryDescription = geometryDimsInches
+        ? "Geometry extents converted to inches: " + geometryDimsInches.map(value => value.toFixed(3)).join(" × ") +
+          " (" + geometry.units.name + ")."
+        : "Geometry extents: " +
+          geometry.extents.minX.toFixed(3) + "–" + geometry.extents.maxX.toFixed(3) +
+          " × " + geometry.extents.minY.toFixed(3) + "–" + geometry.extents.maxY.toFixed(3) +
+          " (" + geometry.units.name + ").";
+
+      fileChecks.push(makeCheck("OK", geometry.geometryEntityCount + " geometry entity/entities parsed. " + geometryDescription));
+
+      if (geometryDimsInches && dimensionValues.length === 2) {
+        const filenameGeometryMatch = dimensionPairMatches(dimensionValues, geometryDimsInches);
+        fileChecks.push(makeCheck(
+          filenameGeometryMatch ? "OK" : "ERROR",
+          filenameGeometryMatch
+            ? "DXF filename dimensions agree with measured DXF geometry."
+            : "DXF filename dimensions DO NOT agree with measured DXF geometry. Filename: " +
+              dimensionValues.join(" × ") + "; measured geometry: " +
+              geometryDimsInches.map(value => value.toFixed(3)).join(" × ") + " in."
+        ));
+
+        const pdfGeometryPair = findClosestPdfDimensionPair(pdfPages, dxf.componentLabel, geometryDimsInches);
+        if (pdfGeometryPair) {
+          const geometryPdfMatch = dimensionPairMatches(geometryDimsInches, pdfGeometryPair.pair);
+          fileChecks.push(makeCheck(
+            geometryPdfMatch ? "OK" : "ERROR",
+            geometryPdfMatch
+              ? "Measured DXF geometry agrees with the closest component-specific PDF dimension pair: " +
+                pdfGeometryPair.pair.join(" × ") + " in. (page(s) " + pdfGeometryPair.pages.join(", ") + ")."
+              : "Measured DXF geometry DOES NOT agree with the component-specific PDF dimensions. Measured: " +
+                geometryDimsInches.map(value => value.toFixed(3)).join(" × ") +
+                " in.; closest PDF pair: " + pdfGeometryPair.pair.join(" × ") +
+                " in. (page(s) " + pdfGeometryPair.pages.join(", ") + ")."
+          ));
+        } else {
+          fileChecks.push(makeCheck("WARNING",
+            "No usable component-specific PDF dimension pair was found for geometry comparison."
+          ));
+        }
+      } else if (!geometryDimsInches) {
+        fileChecks.push(makeCheck("WARNING",
+          "DXF geometry was parsed, but its drawing units are unknown; geometry dimensions were not compared in inches."
+        ));
+      }
     }
 
     const errors = fileChecks.filter(check => check.status === "ERROR").length;
