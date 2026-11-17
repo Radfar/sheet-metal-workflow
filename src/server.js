@@ -439,7 +439,13 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
         }
 
         const component = bomRows[pageIndex * BOM_ROWS_PER_SHEET + index];
-        if (!component) continue;
+        if (!component) {
+          // Ensure the group separator is genuinely empty across the BOM table.
+          for (let column = 1; column <= 11; column++) {
+            worksheet.getCell(rowNumber, column).value = null;
+          }
+          continue;
+        }
 
         const quantity = Number(component.quantityPerAssembly);
         if (!Number.isFinite(quantity) || quantity < 0 || component.quantityPerAssembly === "") {
