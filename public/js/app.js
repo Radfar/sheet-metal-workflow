@@ -1253,8 +1253,8 @@ async function importFixtureFolder(folderTag, providedEntries) {
   $("parseStatus").className = "ok";
   $("fixtureSourcePaths").textContent = "Sources for " + tag + ": PDF " + pdfCandidates[0].path +
     " · BOM " + bomCandidates[0].path + " · DXF " + dxfEntries.length + " file(s).";
-  $("dxfFilenamePreview").value = dxfNames.join("\n");
-  $("dxfFilenameDetails").hidden = false;
+  if ($("dxfFilenamePreview")) $("dxfFilenamePreview").value = dxfNames.join("\n");
+  if ($("dxfFilenameDetails")) $("dxfFilenameDetails").hidden = false;
   $("drawingTextPreview").value = drawingText || "No extractable text layer was found; the PDF remains identified as a source reference.";
   $("drawingTextDetails").hidden = false;
   setFolderValidation({bomDxf:true,pdf:true,pdfText:Boolean(drawingText)});
