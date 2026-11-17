@@ -181,3 +181,22 @@ export function analyzeDrawingPages(pages, fixtureTag = "") {
     purchasedItems: uniqueItems
   };
 }
+
+
+export function mapPurchasedItemsToBomRows(purchasedItems) {
+  return (Array.isArray(purchasedItems) ? purchasedItems : []).map((candidate, index) => {
+    const quantityText = String(candidate.quantity || "");
+    const quantityMatch = quantityText.match(/(?:^|\\bQTY\\.?\\s*[:=#-]?\\s*)(\\d+(?:\\.\\d+)?)/i);
+    const quantityUnitMatch = quantityText.match(/\\b(SETS?|PCS?|EA|EACH)\\b/i);
+    return {
+      itemNo: "P" + (index + 1),
+      purchasedItem: true,
+      description: String(candidate.description || "").trim(),
+      quantityPerAssembly: quantityMatch ? Number(quantityMatch[1]) : "",
+      quantityUnit: quantityUnitMatch ? quantityUnitMatch[1].toUpperCase() : "",
+      pageNumber: candidate.pageNumber,
+      confidence: candidate.confidence,
+      evidence: candidate.evidence
+    };
+  }).filter(item => item.description);
+}
