@@ -120,3 +120,23 @@ test("omits empty purchased-item descriptions rather than creating blank BOM ite
   assert.equal(rows[0].itemNo, "P2");
   assert.equal(rows[0].quantityPerAssembly, 5);
 });
+
+
+test("sets #8 RH TEK SCREW quantity to three times the fixture gusset quantity", () => {
+  const rows = mapPurchasedItemsToBomRows([
+    { description: '#8 RH TEK SCREWS x1/2"', quantity: "", pageNumber: 2 },
+    { description: '10-32 RHMS x 1/2" C/W HEX NYLOK NUT', quantity: "40 SETS", pageNumber: 2 }
+  ], 4);
+
+  assert.equal(rows[0].quantityPerAssembly, 12);
+  assert.equal(rows[1].quantityPerAssembly, 40);
+  assert.equal(rows[1].quantityUnit, "SETS");
+});
+
+test("uses zero screw quantity when no gussets are listed in the fixture BOM", () => {
+  const rows = mapPurchasedItemsToBomRows([
+    { description: '#8 RH TEK SCREWS x1/2"', quantity: "", pageNumber: 2 }
+  ], 0);
+
+  assert.equal(rows[0].quantityPerAssembly, 0);
+});
