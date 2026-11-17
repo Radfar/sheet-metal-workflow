@@ -386,7 +386,29 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       editAs: "oneCell"
     });
 
-    const pageCount = Math.ceil(components.length / BOM_ROWS_PER_SHEET);
+    // Arrange BOM items into three shop-floor groups while preserving the
+    // SolidWorks order within each group: Angles, Channels, then Common Parts.
+    // A null entry represents the intentionally blank separator row.
+    const classifyBomGroup = component => {
+      const source = [component.partNumber, component.description, component.componentType]
+        .filter(Boolean).join(" ").toUpperCase();
+      if (/SHORT[\\s_-]*ANG|\\bANGLE\\b|\\bANG\\b|[-_]ANG(?:[-_\\d]|$)/i.test(source)) return "angles";
+      if (/\\bCHANNEL\\b|\\bCHN['’]?L\\b|\\bTROUGH\\b/i.test(source)) return "channels";
+      return "common";
+    };
+    const groupedComponents = {
+      angles: components.filter(component => classifyBomGroup(component) === "angles"),
+      channels: components.filter(component => classifyBomGroup(component) === "channels"),
+      common: components.filter(component => classifyBomGroup(component) === "common")
+    };
+    const bomRows = [];
+    ["angles", "channels", "common"].forEach(group => {
+      if (!groupedComponents[group].length) return;
+      if (bomRows.length) bomRows.push(null);
+      bomRows.push(...groupedComponents[group]);
+    });
+
+    const pageCount = Math.ceil(bomRows.length / BOM_ROWS_PER_SHEET);
     const worksheets = [templateWorksheet];
     for (let page = 2; page <= pageCount; page++) {
       worksheets.push(cloneTemplateWorksheet(templateWorksheet, workbook, "BOM " + page));
@@ -416,7 +438,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           worksheet.getCell(rowNumber, column).value = null;
         }
 
-        const component = components[pageIndex * BOM_ROWS_PER_SHEET + index];
+        const component = bomRows[pageIndex * BOM_ROWS_PER_SHEET + index];
         if (!component) continue;
 
         const quantity = Number(component.quantityPerAssembly);
@@ -427,6 +449,12 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
         worksheet.getCell(rowNumber, 1).value =
           component.itemNo || String(pageIndex * BOM_ROWS_PER_SHEET + index + 1);
         const descriptionCell = worksheet.getCell(rowNumber, 2);
+        // Normalize the data-row font size so the first item matches all
+        // subsequent BOM items, without changing bold/italic/font family.
+        for (const column of [1, 2, 10, 11]) {
+          const cell = worksheet.getCell(rowNumber, column);
+          cell.font = { ...(cell.font || {}), size: 10 };
+        }
         const description = String(component.description || "").trim();
         const partNumber = String(component.partNumber || "").trim().replace(/^"+|"+$/g, "");
 
