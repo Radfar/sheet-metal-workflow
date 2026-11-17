@@ -529,18 +529,45 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           // Keep the suffix as a separate trailing segment so the export order is:
           // description + process + quoted part number + manufacturing suffix.
           const suffixMatch = description.match(/\s*(\(Made in \d+pcs\.\)\s*\([^)]*\))\s*$/i);
-          const manufacturingSuffix = partNumber === "T08-F2"
-            ? "(Made in 1pcs.) (0/0)"
+          // A channel with a 24 3/16-inch second flat-pattern dimension uses
+          // the approved 7 11/16 x 9 x 7 11/16 channel profile. This is a
+          // dimensional rule, not a fixture-tag or part-number exception.
+          const channelDimensionsMatch = description.match(
+            /(?:flat\s*pattern\s*)?(\d+(?:\s+\d+\/\d+|\.\d+)?)"\s*[xX]\s*(\d+(?:\s+\d+\/\d+|\.\d+)?)"/i
+          );
+          const isChannelDescription = /\bCHANNEL\b|\bCHN['’]?L\b/i.test(description);
+          const toInches = value => {
+            const fraction = String(value).trim().match(/^(\d+)(?:\s+(\d+)\/(\d+))?$/);
+            if (fraction) {
+              return Number(fraction[1]) +
+                (fraction[2] ? Number(fraction[2]) / Number(fraction[3]) : 0);
+            }
+            const decimal = Number(value);
+            return Number.isFinite(decimal) ? decimal : null;
+          };
+          const channelGauge = description.match(/\b\d+GA\./i)?.[0]?.toUpperCase() || "";
+          const isStandardProfileChannel = Boolean(
+            isChannelDescription &&
+            channelDimensionsMatch &&
+            Math.abs(toInches(channelDimensionsMatch[2]) - 24.1875) < 1e-8 &&
+            channelGauge
+          );
+          const manufacturingSuffix = isStandardProfileChannel
+            ? (suffixMatch ? suffixMatch[1] : "(Made in 1pcs.) (0/0)")
             : suffixMatch ? suffixMatch[1] : "";
-          // Exact Shop BOM descriptions for approved fixture-specific exceptions.
-          // These overrides change only the named part numbers.
+          // These named exceptions remain part-number-specific. The channel
+          // profile rule above is intentionally applied to every matching channel.
           const descriptionOverrides = {
             "SPLICE-PLT-T": '10 1/4" x 8" 16GA. Plt. (Laser)',
             "MILLWORK-ENDCAP": '7 11/16" x 9" 16GA. Plt. (Laser)',
-            "T08-F2": '7 11/16" X 9" x 7 11/16" 16GA. Chn\'l x 86 1/2" (Laser/SM)',
             "ANGLE-CONNECTION": '1 3/8" x 1 3/8" 16GA. Angle x 5 3/4" (Laser/SM)'
           };
-          const descriptionBody = descriptionOverrides[partNumber] ??
+          const standardChannelDescription = isStandardProfileChannel
+            ? '7 11/16" X 9" x 7 11/16" ' + channelGauge +
+              " Chn'l x " + channelDimensionsMatch[1] + '" (Laser/SM)'
+            : null;
+          const descriptionBody = standardChannelDescription ??
+            descriptionOverrides[partNumber] ??
             (suffixMatch ? description.slice(0, suffixMatch.index).trimEnd() : description);
           const isSplicePlate = partNumber === "SPLICE-PLT-2" ||
             partNumber === "SPLICE-PLT-3" ||
