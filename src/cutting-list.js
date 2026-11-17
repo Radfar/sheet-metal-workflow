@@ -205,6 +205,25 @@ export async function buildCuttingListWorkbook(payload = {}) {
     gauge11: { title: "11GA CRS", headingRow: 106, firstRow: 107, lastRow: 175 }
   };
 
+  // ExcelJS preserves shared-formula metadata from the template. When rows are
+  // inserted, that metadata can leave a clone pointing at a moved/nonexistent
+  // master (for example A205). Convert shared formulas to ordinary formulas before
+  // changing the row structure so the exported workbook remains valid.
+  function normalizeSharedFormulas(worksheet) {
+    for (const row of worksheet._rows || []) {
+      for (const cell of row?._cells || []) {
+        const value = cell.value;
+        if (value && typeof value === "object" && value.sharedFormula) {
+          const formula = cell.formula;
+          const result = cell.result;
+          cell.value = formula ? { formula, result } : result ?? null;
+        }
+      }
+    }
+  }
+
+  normalizeSharedFormulas(ws);
+
   // The original template allocates 83 rows to 16GA CRS and 69 rows to 11GA CRS.
   // Extend the material section in-place when an order contains more lines than
   // the template provides. Insert before the next section so its heading and
