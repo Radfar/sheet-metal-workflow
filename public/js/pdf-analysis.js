@@ -206,3 +206,14 @@ export function mapPurchasedItemsToBomRows(purchasedItems, gussetQuantity = 0) {
     };
   }).filter(item => item.description);
 }
+
+
+export function calculateGussetQuantity(components) {
+  return (Array.isArray(components) ? components : []).reduce((total, component) => {
+    const identity = [component.partNumber, component.description, component.componentType]
+      .filter(Boolean).join(" ");
+    if (!/GUSSET|\bGUS\b/i.test(identity)) return total;
+    const quantity = Number(component.quantityPerAssembly);
+    return Number.isFinite(quantity) && quantity >= 0 ? total + quantity : total;
+  }, 0);
+}
