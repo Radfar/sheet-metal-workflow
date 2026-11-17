@@ -349,11 +349,15 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       shopFormat = false,
       shipDate = "",
       note = "",
-      components = []
+      components = [],
+      purchasedItems = []
     } = req.body ?? {};
 
     if (!Array.isArray(components) || components.length === 0) {
       return res.status(400).json({ error: "No BOM components to export." });
+    }
+    if (!Array.isArray(purchasedItems)) {
+      return res.status(400).json({ error: "Purchased items must be supplied as a list." });
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -416,6 +420,30 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       bomRows.push(...groupedComponents[group]);
     });
 
+    // PDF-derived purchased items are kept separate from the SolidWorks component
+    // groups and appended at the bottom, preceded by one completely blank row.
+    if (purchasedItems.length) {
+      if (bomRows.length) bomRows.push(null);
+      purchasedItems.forEach((item, index) => {
+        const description = String(item.description || "").trim();
+        if (!description) return;
+        const rawQuantity = item.quantityPerAssembly;
+        const hasQuantity = rawQuantity !== "" && rawQuantity !== null && rawQuantity !== undefined;
+        const quantity = hasQuantity ? Number(rawQuantity) : "";
+        if (hasQuantity && (!Number.isFinite(quantity) || quantity < 0)) {
+          throw new Error("Invalid detected quantity for purchased item: " + description);
+        }
+        bomRows.push({
+          itemNo: item.itemNo || "P" + (index + 1),
+          partNumber: "",
+          description,
+          quantityPerAssembly: quantity,
+          quantityUnit: String(item.quantityUnit || "").replace(/[^A-Za-z]/g, "").toUpperCase(),
+          purchasedItem: true
+        });
+      });
+    }
+
     const pageCount = Math.ceil(bomRows.length / BOM_ROWS_PER_SHEET);
     const worksheets = [templateWorksheet];
     for (let page = 2; page <= pageCount; page++) {
@@ -455,9 +483,12 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           continue;
         }
 
-        const quantity = Number(component.quantityPerAssembly);
-        if (!Number.isFinite(quantity) || quantity < 0 || component.quantityPerAssembly === "") {
-          throw new Error("Invalid BOM quantity for " + (component.partNumber || "an unnamed component") + ".");
+        const hasQuantity = component.quantityPerAssembly !== "" &&
+          component.quantityPerAssembly !== null && component.quantityPerAssembly !== undefined;
+        const quantity = hasQuantity ? Number(component.quantityPerAssembly) : "";
+        if ((!component.purchasedItem && !hasQuantity) ||
+            (hasQuantity && (!Number.isFinite(quantity) || quantity < 0))) {
+          throw new Error("Invalid BOM quantity for " + (component.partNumber || component.description || "an unnamed component") + ".");
         }
 
         worksheet.getCell(rowNumber, 1).value =
@@ -472,11 +503,13 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
         const description = String(component.description || "").trim();
         const partNumber = String(component.partNumber || "").trim().replace(/^"+|"+$/g, "");
 
-        if (shopFormat && !partNumber) {
+        if (shopFormat && !partNumber && !component.purchasedItem) {
           throw new Error("Missing SolidWorks part number for BOM item " + (component.itemNo || rowNumber - 11) + ".");
         }
 
-        if (shopFormat && partNumber) {
+        if (component.purchasedItem) {
+          descriptionCell.value = description;
+        } else if (shopFormat && partNumber) {
           const baseFont = { ...(descriptionCell.font || {}) };
           const richText = [];
           // Manufacturing suffixes belong after the quoted SolidWorks part number.
@@ -518,13 +551,20 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           descriptionCell.value = description || String(component.partNumber || "").trim();
         }
 
-        worksheet.getCell(rowNumber, 10).value = quantity;
+        worksheet.getCell(rowNumber, 10).value = hasQuantity ? quantity : null;
+        const quantityUnit = String(component.quantityUnit || "").replace(/[^A-Za-z]/g, "").toUpperCase();
+        if (component.purchasedItem && quantityUnit && hasQuantity) {
+          worksheet.getCell(rowNumber, 10).numFmt = '0 "' + quantityUnit + '"';
+        }
 
-        if (fixtureQty > 0) {
+        if (fixtureQty > 0 && hasQuantity) {
           worksheet.getCell(rowNumber, 11).value = {
             formula: "J" + rowNumber + "*I9",
             result: quantity * fixtureQty
           };
+          if (component.purchasedItem && quantityUnit) {
+            worksheet.getCell(rowNumber, 11).numFmt = '0 "' + quantityUnit + '"';
+          }
         }
       }
 
