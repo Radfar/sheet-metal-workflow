@@ -318,23 +318,23 @@ function buildShopStandardExportDescription(component) {
     // Require a fixture-style part ID and a source channel/trough descriptor
     // so ordinary channel components keep their existing generic format.
     const troughSource = identitySource + " " + description;
-    const isFixturePartId = /^T\\d+[A-Z]?-[A-Z]$/i.test(partNumber);
-    const isChannelSource = /\\bCHANNEL\\b|\\bCHN'L\\b/i.test(troughSource);
-    const channelDimensions = description.match(/(\\d+(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+)\\s*["″]?\\s*[x×]\\s*(\\d+(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+)\\s*["″]?/i);
+    const isFixturePartId = /^T\d+[A-Z]?-[A-Z]$/i.test(partNumber);
+    const isChannelSource = /\bCHANNEL\b|\bCHN'L\b/i.test(troughSource);
+    const channelDimensions = description.match(/(\d+(?:\s+\d+\/\d+)?|\d+\/\d+)\s*["″]?\s*[x×]\s*(\d+(?:\s+\d+\/\d+)?|\d+\/\d+)\s*["″]?/i);
     const hasApprovedChannelProfile = Boolean(channelDimensions &&
-      channelDimensions[2].replace(/\\s+/g, " ").trim() === "24 3/16");
+      channelDimensions[2].replace(/\s+/g, " ").trim() === "24 3/16");
     const isSpecialFixtureChannel = isFixturePartId && isChannelSource && hasApprovedChannelProfile;
     const isFixtureTroughPart = isFixturePartId && isChannelSource;
     const isTroughSection = !isSpecialFixtureChannel &&
-      (isFixtureTroughPart || /\\bTROUGH\\s+SECTION\\b/i.test(troughSource));
+      (isFixtureTroughPart || /\bTROUGH\s+SECTION\b/i.test(troughSource));
 
     if (isSpecialFixtureChannel) {
       const overallLength = formatShopDimension(channelDimensions[1]);
-      const gauge = description.match(/\\b\\d+GA\\./i)?.[0] || "";
+      const gauge = description.match(/\b\d+GA\./i)?.[0] || "";
       const fixedProfile = '7 11/16" X 9" x 7 11/16"';
       description = [fixedProfile, gauge, "Chn'l", "x " + overallLength,
         "(Laser/SM)", "(Made in 1pcs.)", "(0/0)"].filter(Boolean).join(" ");
-    } else if (isEndcap || isGusset || isShortAngle || isTroughSection) {    if (isEndcap || isGusset || isShortAngle || isTroughSection) {
+    } else if (isEndcap || isGusset || isShortAngle || isTroughSection) {
       let name = identity;
       if (isEndcap) {
         name = name.replace(/\s+ENDCAP\s*$/i, "").replace(/\s+/g, " ").trim();
