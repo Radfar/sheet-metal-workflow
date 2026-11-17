@@ -113,3 +113,12 @@ footer{text-align:center;color:#9aa4ad;font-size:10px;padding:18px}
 .project-batch-actions .status-text{flex-basis:100%;margin:4px 0 0}
 #fixtureFolderPanel .notice{line-height:1.65}
 .summary-table{min-width:1120px}
+
+/* PDF drawing extraction review */
+.pdf-subheading{font-size:12px;color:#42586a;margin:18px 0 8px}
+.pdf-analysis-table{min-width:1050px}
+.pdf-analysis-table td{vertical-align:top;white-space:normal;line-height:1.45}
+.pdf-analysis-table td:nth-child(3),.pdf-analysis-table td:last-child{min-width:220px;max-width:420px}
+.pdf-confidence-higher{font-weight:700;color:#28724d}
+.pdf-confidence-possible{font-weight:650;color:#8a6829}
+#pdfAnalysisStatus{margin:4px 0 10px}
