@@ -98,31 +98,27 @@ The following component description patterns are implemented in the Shop-Standar
 | Trough section | Flat-pattern dimensions + gauge + process + quoted part number | `91 3/16" x 24 3/16" 16GA. (Laser/SM) "T01A-A"` |
 | End cap | Flat-pattern dimensions + gauge + `Plt.` + `(Laser)` + quoted part number | `7 11/16" x 9" 16GA. Plt. (Laser) "ENDCAP"` |
 | Plate splice | Plate dimensions + gauge + `Plt.` + `(Laser)` + quoted part number | `2" x 8" 16GA. Plt. (Laser) "SPLICE-PLT-2"` |
-| Gusset / GUSSET / GUS | Three geometry dimensions + gauge + `Chn'l x` + two return dimensions joined by `&` + `Return Gusset` + `(Laser/SM)` | `1 3/4" x 8 13/16" x 1 3/4" 16GA. Chn'l x 6 1/16" & 1 3/4" Return Gusset (Laser/SM)` |
+| Gusset / GUSSET / GUS | Fixed common-part description; source dimensions and part number are not appended | `1 3/4" x 8 13/16" x 1 3/4" 16GA. Chn'l x 6 1/16" & 1 3/4" Return Gusset (Laser/SM)` |
 | Angle / ANG / Short angle | Standard profile + gauge + `Angle x [overall length]` + `(Laser/SM)` + quoted part number when the second source dimension is `2 3/16"` or `2.18"` | `1" x 1 3/8" 11GA. Angle x 92 5/8" (Laser/SM) "T01A-ANG-1"` |
 | Fixture channel (approved profile) | Fixed profile + gauge + `Chn'l` + overall length + process + one-piece suffix | `7 11/16" X 9" x 7 11/16" 16GA. Chn'l x 91 3/16" (Laser/SM) "T01A-A" (Made in 1pcs.) (0/0)` |
 | Ordinary channel | Dimensions + gauge + `Chn'l` + length, where available | `2" x 1" 16GA. Chn'l x 90"` |
 | Purchased hardware | Hardware size + hardware type + length | `#8 RH Tek Screw x 1/2"` |
 
-### Gusset / GUSSET / GUS description
+### Gusset / GUSSET / GUS common-part standard
 
-Apply this format to all components identified as `GUSSET` or `GUS`, whether the identity appears in the component name, description, or part number.
-
-Use this sequence:
-
-1. The three geometry dimensions, in their source order.
-2. The verified gauge (for example, `16GA.`).
-3. `Chn'l x` followed by the two return dimensions, joined by `&`.
-4. `Return Gusset`.
-5. The process marker `(Laser/SM)`.
-
-Approved example:
+There is only one Gusset type across the project. Whenever a BOM component is identified as `GUSSET` or `GUS` (including `REMOVABLE-GUSSET`), replace its source description with this exact fixed description:
 
 ```text
 1 3/4" x 8 13/16" x 1 3/4" 16GA. Chn'l x 6 1/16" & 1 3/4" Return Gusset (Laser/SM)
 ```
 
-The geometry dimensions and return dimensions must remain separate. Preserve their source values and order; do not infer missing dimensions.
+Rules:
+
+1. Treat every identified Gusset as the same standardized common part across all fixtures.
+2. Do not use the dimensions, gauge, profile, or return dimensions from the individual SolidWorks BOM row to build this description.
+3. Do not append the SolidWorks part number (for example, `REMOVABLE-GUSSET`) to this description.
+4. Use the fixed description exactly as shown above, including `16GA.` and `(Laser/SM)`.
+
 ### Angle / ANG / Short Angle standard profile
 
 Apply this rule to components identified as **Angle**, **ANG**, or **Short Angle**, including identities indicated by the part number (for example, `T01A-ANG-1` or `SHORT-ANG`), when the second source dimension is exactly `2 3/16"` or `2.18"`.
