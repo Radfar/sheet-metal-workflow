@@ -491,7 +491,6 @@ function saveCurrentFixture() {
     drawingText: drawingText || fixtureData[currentFixtureTag]?.drawingText || "",
     bomGenerated: Boolean(fixtureData[currentFixtureTag]?.bomGenerated),
     shopBomGenerated: Boolean(fixtureData[currentFixtureTag]?.shopBomGenerated),
-    dxfBomGenerated: Boolean(fixtureData[currentFixtureTag]?.dxfBomGenerated),
     generatedAt: fixtureData[currentFixtureTag]?.generatedAt || "",
     includeInLaser: fixtureData[currentFixtureTag]?.includeInLaser !== false
   };
@@ -556,8 +555,7 @@ function renderSummary() {
       esc(item.width) + '</td><td>' + esc(item.length) + '</td><td>' +
       esc(item.finish) + '</td><td>' + esc(item.qty) + '</td><td>' +
       esc(count || "—") + '</td><td>' + (imported ? "Imported" : "Attention") + '</td><td>' +
-      (imported && saved.shopBomGenerated ? "✓" : "—") + '</td><td>' +
-      (imported && saved.dxfBomGenerated ? "✓" : "—") + '</td><td><input type="checkbox" data-laser-include="' +
+      (imported && saved.shopBomGenerated ? "✓" : "—") + '</td><td><input type="checkbox" data-laser-include="' +
       esc(item.tag) + '"' + (imported && saved.bomGenerated && include ? " checked" : "") +
       (!imported || !saved.bomGenerated ? " disabled" : "") + ' aria-label="Include ' + esc(item.tag) +
       ' in Laser Order Request"></td></tr>';
@@ -574,7 +572,6 @@ function updateLaserOrderButtonState() {
 
 function renderComponents() {
   $("rowCount").textContent = components.length + " BOM item" + (components.length === 1 ? "" : "s");
-  $("exportBtn").disabled = components.length === 0;
   $("exportShopBtn").disabled = components.length === 0;
   const body = $("componentRows");
 
@@ -1037,7 +1034,6 @@ async function importFixtureFolder(folderTag, providedEntries) {
   rebuildComponents();
   fixtureData[tag].bomGenerated = false;
   fixtureData[tag].shopBomGenerated = false;
-  fixtureData[tag].dxfBomGenerated = false;
   fixtureData[tag].generatedAt = "";
   fixtureData[tag].includeInLaser = true;
   fixtureData[tag].sourceFiles = {
@@ -1142,9 +1138,8 @@ $("fixtureFolderInput").addEventListener("change", async () => {
   }
 });
 
-async function generateProjectBatch(mode) {
-  const button = mode === "shop" ? $("projectShopBtn") : $("projectDxfBtn");
-  const other = mode === "shop" ? $("projectDxfBtn") : $("projectShopBtn");
+async function generateProjectBatch() {
+  const button = $("projectShopBtn");
   const tags = schedule.map(item => item.tag).filter(tag =>
     importedProjectTags.includes(tag) && fixtureData[tag]?.components?.length
   );
@@ -1155,8 +1150,7 @@ async function generateProjectBatch(mode) {
   }
 
   button.disabled = true;
-  other.disabled = true;
-  $("projectBatchStatus").textContent = "Generating " + (mode === "shop" ? "Shop-format" : "DXF-based") + " BOM workbooks…";
+  $("projectBatchStatus").textContent = "Generating Shop-format BOM workbooks…";
 
   try {
     // Generate each workbook in memory, then package all successful files into
@@ -1178,14 +1172,12 @@ async function generateProjectBatch(mode) {
           fixtureDescription:$("fixtureDescription").value,
           finish:[$("finish").value, $("finishDescription").value].filter(Boolean).join(" = "),
           bomFilenameDescription:$("bomFilenameDescription").value,
-          shopFormat:mode === "shop",
+          shopFormat:true,
           components:components.map(component => ({
             itemNo:component.itemNo,
             partNumber:component.partNumber,
             quantityPerAssembly:component.quantityPerAssembly,
-            description:mode === "shop"
-              ? buildShopStandardExportDescription(component)
-              : component.description
+            description:buildShopStandardExportDescription(component)
           }))
         };
 
@@ -1204,14 +1196,13 @@ async function generateProjectBatch(mode) {
         const filenameMatch = disposition.match(/filename="([^"]+)"/i);
         const filename = filenameMatch
           ? filenameMatch[1]
-          : makeBomFilename().replace(/\.xlsx$/i, "") +
-            (mode === "shop" ? " - Shop Standard.xlsx" : " - DXF-Based.xlsx");
+          : makeBomFilename().replace(/\.xlsx$/i, "") + " - Shop Standard.xlsx";
 
         files.push({ filename, blob });
 
         fixtureData[tag] = fixtureData[tag] || {};
         fixtureData[tag].bomGenerated = true;
-        fixtureData[tag][mode === "shop" ? "shopBomGenerated" : "dxfBomGenerated"] = true;
+        fixtureData[tag].shopBomGenerated = true;
         fixtureData[tag].generatedAt = new Date().toISOString();
         fixtureData[tag].includeInLaser = fixtureData[tag].includeInLaser !== false;
         saveCurrentFixture();
@@ -1233,7 +1224,7 @@ async function generateProjectBatch(mode) {
 
     const zipName = [
       $("projectNumber").value || "Project",
-      mode === "shop" ? "Shop-Format-BOMs" : "DXF-Based-BOMs"
+      "Shop-Format-BOMs"
     ].join(" - ") + ".zip";
 
     if ("showSaveFilePicker" in window) {
@@ -1260,8 +1251,7 @@ async function generateProjectBatch(mode) {
 
     renderSummary();
     $("projectBatchStatus").textContent =
-      (mode === "shop" ? "Shop-format" : "DXF-based") +
-      " batch export: " + files.length + " workbook(s) packaged into " + zipName +
+      "Shop-format batch export: " + files.length + " workbook(s) packaged into " + zipName +
       (failed.length ? ". Failed: " + failed.join(" | ") : ". Choose the ZIP save location once.");
     $("projectBatchStatus").className = failed.length ? "status-text" : "ok";
   } catch (error) {
@@ -1271,11 +1261,9 @@ async function generateProjectBatch(mode) {
     $("projectBatchStatus").className = error.name === "AbortError" ? "status-text" : "error";
   } finally {
     button.disabled = false;
-    other.disabled = false;
   }
 }
-$("projectDxfBtn").addEventListener("click", () => generateProjectBatch("dxf"));
-$("projectShopBtn").addEventListener("click", () => generateProjectBatch("shop"));
+$("projectShopBtn").addEventListener("click", () => generateProjectBatch());
 
 $("buildComponentTreeBtn").addEventListener("click", () => {
   if (!components.length || $("buildComponentTreeBtn").disabled) return;
@@ -1427,16 +1415,13 @@ $("generateSummaryBtn").addEventListener("click", () => {
   $("summaryStatus").className = "ok";
 });
 
-async function exportBomWorkbook(descriptionMode) {
-  const button = descriptionMode === "shop" ? $("exportShopBtn") : $("exportBtn");
-  const otherButton = descriptionMode === "shop" ? $("exportBtn") : $("exportShopBtn");
+async function exportBomWorkbook() {
+  const button = $("exportShopBtn");
   button.disabled = true;
-  otherButton.disabled = true;
-  const isShop = descriptionMode === "shop";
   const status = $("bomExportStatus");
-  status.textContent = isShop ? "Generating shop-format BOM Excel…" : "Generating DXF-based BOM Excel…";
+  status.textContent = "Generating shop-format BOM Excel…";
   status.className = "status-text";
-  $("parseStatus").textContent = isShop ? "Generating shop-format Excel BOM…" : "Generating DXF-based Excel BOM…";
+  $("parseStatus").textContent = "Generating shop-format Excel BOM…";
   $("parseStatus").className = "status-text";
 
   try {
@@ -1451,14 +1436,12 @@ async function exportBomWorkbook(descriptionMode) {
       fixtureDescription:$("fixtureDescription").value,
       finish:[$("finish").value, $("finishDescription").value].filter(Boolean).join(" = "),
       bomFilenameDescription:$("bomFilenameDescription").value,
-      shopFormat:isShop,
+      shopFormat:true,
       components:components.map(component => ({
         itemNo:component.itemNo,
         partNumber:component.partNumber,
         quantityPerAssembly:component.quantityPerAssembly,
-        description:isShop
-          ? buildShopStandardExportDescription(component)
-          : component.description
+        description:buildShopStandardExportDescription(component)
       }))
     };
 
@@ -1477,7 +1460,7 @@ async function exportBomWorkbook(descriptionMode) {
     const anchor = document.createElement("a");
     anchor.href = url;
     const baseFilename = makeBomFilename().replace(/\.xlsx$/i, "");
-    anchor.download = baseFilename + (isShop ? " - Shop Standard.xlsx" : " - DXF-Based.xlsx");
+    anchor.download = baseFilename + " - Shop Standard.xlsx";
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
@@ -1486,20 +1469,19 @@ async function exportBomWorkbook(descriptionMode) {
     const missing = components.filter(component => !String(component.description || "").trim()).length;
     fixtureData[currentFixtureTag] = fixtureData[currentFixtureTag] || {};
     fixtureData[currentFixtureTag].bomGenerated = true;
-    fixtureData[currentFixtureTag][isShop ? "shopBomGenerated" : "dxfBomGenerated"] = true;
+    fixtureData[currentFixtureTag].shopBomGenerated = true;
     fixtureData[currentFixtureTag].generatedAt = new Date().toISOString();
     fixtureData[currentFixtureTag].includeInLaser = fixtureData[currentFixtureTag].includeInLaser !== false;
     saveCurrentFixture();
     renderSummary();
-    $("summaryStatus").textContent = currentFixtureTag + " BOM Excel generated and marked complete.";
+    $("summaryStatus").textContent = currentFixtureTag + " Shop BOM Excel generated and marked complete.";
     $("summaryStatus").className = "ok";
-    const modeLabel = isShop ? "Shop-format" : "DXF-based";
-    status.textContent = modeLabel + " BOM downloaded. Generate the other version for comparison.";
+    status.textContent = "Shop-format BOM downloaded.";
     status.className = "ok";
-    $("parseStatus").textContent = modeLabel + " Excel BOM generated. " +
+    $("parseStatus").textContent = "Shop-format Excel BOM generated. " +
       (missing ? missing + " description(s) are blank; review the workbook before release." : "Descriptions are populated.");
     $("parseStatus").className = missing ? "status-text" : "ok";
-    $("folderImportReview").textContent = currentFixtureTag + " " + modeLabel + " BOM Excel file generated successfully." +
+    $("folderImportReview").textContent = currentFixtureTag + " Shop-format BOM Excel file generated successfully." +
       (missing ? " " + missing + " description(s) remain blank and need review." : "");
     $("folderImportReview").className = missing ? "status-text" : "ok";
   } catch (error) {
@@ -1511,12 +1493,10 @@ async function exportBomWorkbook(descriptionMode) {
     $("folderImportReview").className = "error";
   } finally {
     button.disabled = components.length === 0;
-    otherButton.disabled = components.length === 0;
   }
 }
 
-$("exportBtn").addEventListener("click", () => exportBomWorkbook("dxf"));
-$("exportShopBtn").addEventListener("click", () => exportBomWorkbook("shop"));
+$("exportShopBtn").addEventListener("click", () => exportBomWorkbook());
 
 
 function collectProjectBomData() {
