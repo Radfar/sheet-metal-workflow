@@ -437,26 +437,35 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
         if (shopFormat && partNumber) {
           const baseFont = { ...(descriptionCell.font || {}) };
           const richText = [];
+          // Manufacturing suffixes belong after the quoted SolidWorks part number.
+          // Keep the suffix as a separate trailing segment so the export order is:
+          // description + process + quoted part number + manufacturing suffix.
+          const suffixMatch = description.match(/\\s*(\\(Made in \\d+pcs\\.\\)\\s*\\([^)]*\\))\\s*$/i);
+          const manufacturingSuffix = suffixMatch ? suffixMatch[1] : "";
+          const descriptionBody = suffixMatch
+            ? description.slice(0, suffixMatch.index).trimEnd()
+            : description;
           const isSplicePlate = partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3";
-          if (description && (isSplicePlate || description.includes("(Laser/SM)") || description.includes("(Laser)"))) {
-            const laserMarker = description.includes("(Laser/SM)") ? "(Laser/SM)" : "(Laser)";
-            const laserIndex = description.lastIndexOf(laserMarker);
+          if (descriptionBody && (isSplicePlate || descriptionBody.includes("(Laser/SM)") || descriptionBody.includes("(Laser)"))) {
+            const laserMarker = descriptionBody.includes("(Laser/SM)") ? "(Laser/SM)" : "(Laser)";
+            const laserIndex = descriptionBody.lastIndexOf(laserMarker);
             if (laserIndex >= 0) {
-              const beforeLaser = description.slice(0, laserIndex).trimEnd();
-              const afterLaser = description.slice(laserIndex + laserMarker.length).trim();
+              const beforeLaser = descriptionBody.slice(0, laserIndex).trimEnd();
+              const afterLaser = descriptionBody.slice(laserIndex + laserMarker.length).trim();
               if (beforeLaser) richText.push({ text: beforeLaser + " ", font: baseFont });
               richText.push({ text: laserMarker, font: { ...baseFont, bold: true } });
               if (afterLaser) richText.push({ text: " " + afterLaser + " ", font: baseFont });
             } else {
-              richText.push({ text: description + " ", font: baseFont });
+              richText.push({ text: descriptionBody + " ", font: baseFont });
             }
-          } else if (description) {
-            richText.push({ text: description + " ", font: baseFont });
+          } else if (descriptionBody) {
+            richText.push({ text: descriptionBody + " ", font: baseFont });
           }
           richText.push({
             text: '"' + partNumber + '"',
             font: { ...baseFont, bold: true }
           });
+          if (manufacturingSuffix) richText.push({ text: " " + manufacturingSuffix, font: baseFont });
           descriptionCell.value = { richText };
         } else {
           descriptionCell.value = description || String(component.partNumber || "").trim();
