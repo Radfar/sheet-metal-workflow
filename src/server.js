@@ -420,32 +420,34 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       bomRows.push(...groupedComponents[group]);
     });
 
-    // PDF-derived purchased items are kept separate from the SolidWorks component
-    // groups and appended at the bottom, preceded by one completely blank row.
-    if (purchasedItems.length) {
+    // Append valid PDF-derived purchased items after the fabricated BOM groups.
+    // Exactly one blank row separates the purchased section from the last BOM group.
+    const purchasedBomRows = purchasedItems.flatMap((item, index) => {
+      const description = String(item.description || "").trim();
+      if (!description) return [];
+      const rawQuantity = item.quantityPerAssembly;
+      const hasQuantity = rawQuantity !== "" && rawQuantity !== null && rawQuantity !== undefined;
+      const quantity = hasQuantity ? Number(rawQuantity) : "";
+      if (hasQuantity && (!Number.isFinite(quantity) || quantity < 0)) {
+        throw new Error("Invalid detected quantity for purchased item: " + description);
+      }
+      return [{
+        itemNo: item.itemNo || "P" + (index + 1),
+        partNumber: "",
+        description,
+        quantityPerAssembly: quantity,
+        purchasedItem: true
+      }];
+    });
+    if (purchasedBomRows.length) {
       if (bomRows.length) bomRows.push(null);
-      purchasedItems.forEach((item, index) => {
-        const description = String(item.description || "").trim();
-        if (!description) return;
-        const rawQuantity = item.quantityPerAssembly;
-        const hasQuantity = rawQuantity !== "" && rawQuantity !== null && rawQuantity !== undefined;
-        const quantity = hasQuantity ? Number(rawQuantity) : "";
-        if (hasQuantity && (!Number.isFinite(quantity) || quantity < 0)) {
-          throw new Error("Invalid detected quantity for purchased item: " + description);
-        }
-        bomRows.push({
-          itemNo: item.itemNo || "P" + (index + 1),
-          partNumber: "",
-          description,
-          quantityPerAssembly: quantity,
-          purchasedItem: true
-        });
-      });
+      bomRows.push(...purchasedBomRows);
     }
 
-    // Preserve classified-group separator rows whenever they do not create
-    // an additional printed page. If separators alone would push the BOM onto
-    // another page, compact them so the number of pages is driven by real items.
+    // Keep exactly one blank row between each non-empty fabricated BOM group
+    // and before purchased items, provided those rows fit within the minimum
+    // number of pages required by actual items. If separators would create an
+    // otherwise unnecessary page, remove all separators before pagination.
     const actualBomItemCount = bomRows.filter(Boolean).length;
     const minimumPageCount = Math.max(1, Math.ceil(actualBomItemCount / BOM_ROWS_PER_SHEET));
     const rowsWithSeparatorsPageCount = Math.max(1, Math.ceil(bomRows.length / BOM_ROWS_PER_SHEET));
