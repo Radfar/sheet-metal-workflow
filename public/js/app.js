@@ -124,51 +124,10 @@ function renderDxfAudit() {
 }
 
 function renderPdfAnalysis() {
-  const scopedSchedule = schedule.slice(0, PDF_ANALYSIS_LAST_SCHEDULE_ROW);
-  const pdfsLoaded = scopedSchedule.filter(item => Boolean(fixtureData[item.tag]?.sourceFiles?.drawingPdf));
-  const imported = pdfsLoaded.filter(item => (fixtureData[item.tag]?.drawingPages || []).length > 0);
-  const textExtracted = imported.filter(item => fixtureData[item.tag].drawingPages.some(page => String(page.text || "").trim())).length;
-  const pageRows = [];
-  const candidateRows = [];
-
-  for (const item of scopedSchedule) {
-    const savedPages = fixtureData[item.tag]?.drawingPages || [];
-    if (!savedPages.length) continue;
-    const analysis = analyzeDrawingPages(savedPages, item.tag);
-    const checkSummary = analysis.pageChecks.map(check =>
-      "p" + check.pageNumber + " — " + check.role + ": " + check.result
-    ).join(" | ");
-    pageRows.push(
-      "<tr><td>" + esc(item.tag) + "</td>" +
-      "<td>" + esc(checkSummary) + "</td>" +
-      "<td>" + savedPages.length + "</td></tr>"
-    );
-
-    for (const candidate of analysis.purchasedItems) {
-      candidateRows.push(
-        "<tr><td>" + esc(candidate.fixtureTag) + "</td>" +
-        "<td>" + esc(candidate.pageNumber) + "</td>" +
-        "<td>" + esc(candidate.description) + "</td>" +
-        "<td>" + esc(candidate.quantity || "Not detected") + "</td>" +
-        '<td class="' + (candidate.confidence === "Higher" ? "pdf-confidence-higher" : "pdf-confidence-possible") + '">' +
-        esc(candidate.confidence) + "</td>" +
-        "<td>" + esc(candidate.evidence) + "</td></tr>"
-      );
-    }
-  }
-
-  $("pdfAnalysisStatus").textContent = pdfsLoaded.length
-    ? pdfsLoaded.length + " of " + scopedSchedule.length + " fixture PDFs loaded (schedule entries through T14; T15–T17 excluded); " + imported.length + " parsed into page records; " + textExtracted + " contain extractable text. " +
-      candidateRows.length + " purchased-item reference(s) found. Detected candidates are appended to Shop BOM exports after a blank separator row; review descriptions and quantities before release."
-    : "Import the project folder to analyze drawing PDFs through T14 (excluding T15–T17).";
-  $("pdfPageCheckRows").innerHTML = pageRows.length
-    ? pageRows.join("")
-    : '<tr><td colspan="3" class="empty">No PDF page data available through T14 (T15–T17 excluded).</td></tr>';
-  $("pdfPurchasedRows").innerHTML = candidateRows.length
-    ? candidateRows.join("")
-    : '<tr><td colspan="6" class="empty">No purchased-item candidates detected yet. This does not prove that the drawings contain no purchased items.</td></tr>';
+  // PDF drawing analysis remains available internally for BOM/purchased-item extraction,
+  // but the dedicated web-app analysis panel is intentionally omitted.
+  return;
 }
-
 function getGussetQuantityForFixture(tag) {
   const fixtureComponents = fixtureData[tag]?.components || (tag === currentFixtureTag ? components : []);
   return calculateGussetQuantity(fixtureComponents);
