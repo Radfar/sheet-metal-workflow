@@ -19,6 +19,61 @@ test("finds purchased hardware and retains its source page", () => {
   assert.equal(result.purchasedItems[1].pageNumber, 6);
 });
 
+test("extracts the 10-32 RHMS and HEX NYLOK NUT callout with a nearby SETS quantity", () => {
+  const result = analyzeDrawingPages([
+    { pageNumber: 2, text: "40 SETS\n10-32 RHMSx 1/2\" C/W HEX NYLOK NUT" }
+  ], "T08");
+
+  assert.equal(result.purchasedItems.length, 1);
+  assert.match(result.purchasedItems[0].description, /10-32 RHMSx 1\/2.*C\/W HEX NYLOK NUT/i);
+  assert.equal(result.purchasedItems[0].quantity, "40 SETS");
+  assert.equal(result.purchasedItems[0].pageNumber, 2);
+  assert.equal(result.purchasedItems[0].confidence, "Higher");
+});
+
+test("recognizes the #8 RH TEK SCREWS callout with tight spacing", () => {
+  const result = analyzeDrawingPages([
+    { pageNumber: 11, text: "#8 RH TEK SCREWS x1/2\"" }
+  ], "T14");
+
+  assert.equal(result.purchasedItems.length, 1);
+  assert.match(result.purchasedItems[0].description, /#8 RH TEK SCREWS x1\/2/i);
+  assert.equal(result.purchasedItems[0].pageNumber, 11);
+});
+
+test("uses the observed T08-T14 page layout", () => {
+  const result = analyzeDrawingPages([
+    { pageNumber: 1, text: "T08 FIXTURE QTY: 1" },
+    { pageNumber: 2, text: "10-32 RHMS x 1/2\" C/W HEX NYLOK NUT" },
+    { pageNumber: 3, text: "CHANNEL A" },
+    { pageNumber: 4, text: "CHANNEL B" },
+    { pageNumber: 5, text: "CHANNEL C" },
+    { pageNumber: 6, text: "END CAP" },
+    { pageNumber: 7, text: "ANGLE" },
+    { pageNumber: 11, text: "#8 RH TEK SCREWS x 1/2\"" }
+  ], "T08");
+
+  assert.equal(result.drawingFamily, "T08-T14");
+  assert.deepEqual(result.pageChecks.map(check => check.pageNumber), [1, 3, 4, 5, 6, 7, 2, 11]);
+  assert.match(result.pageChecks.find(check => check.pageNumber === 6).result, /1 end-cap/);
+  assert.match(result.pageChecks.find(check => check.pageNumber === 2).result, /1 target hardware/);
+});
+
+test("retains the T01-T07 page layout and searches purchased items on all pages", () => {
+  const result = analyzeDrawingPages([
+    { pageNumber: 1, text: "T01A FIXTURE QTY: 2" },
+    { pageNumber: 2, text: "CHANNEL" },
+    { pageNumber: 3, text: "TROUGH" },
+    { pageNumber: 4, text: "ANGLE" },
+    { pageNumber: 6, text: "#8 RH TEK SCREWS x 1/2\"" }
+  ], "T01A");
+
+  assert.equal(result.drawingFamily, "T01-T07");
+  assert.deepEqual(result.pageChecks.map(check => check.pageNumber), [1, 2, 3, 4, 6]);
+  assert.equal(result.purchasedItems.length, 1);
+  assert.equal(result.purchasedItems[0].pageNumber, 6);
+});
+
 test("does not invent purchase items when no recognized hardware terms exist", () => {
   const result = analyzeDrawingPages([
     { pageNumber: 1, text: "T02 fixture quantity 1" },
