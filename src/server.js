@@ -444,16 +444,24 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       bomRows.push(...purchasedBomRows);
     }
 
-    // Keep exactly one blank row between each non-empty fabricated BOM group
-    // and before purchased items, provided those rows fit within the minimum
-    // number of pages required by actual items. If separators would create an
-    // otherwise unnecessary page, remove all separators before pagination.
+    // Preserve as many group separators as the minimum required page count can hold.
+    // This uses otherwise-empty rows at the bottom of a page (for example, T08)
+    // instead of dropping every separator when the full set would overflow.
+    // Actual BOM items always take priority; excess separators are omitted only
+    // when necessary to prevent an avoidable additional page.
     const actualBomItemCount = bomRows.filter(Boolean).length;
     const minimumPageCount = Math.max(1, Math.ceil(actualBomItemCount / BOM_ROWS_PER_SHEET));
-    const rowsWithSeparatorsPageCount = Math.max(1, Math.ceil(bomRows.length / BOM_ROWS_PER_SHEET));
-    const printableBomRows = rowsWithSeparatorsPageCount > minimumPageCount
-      ? bomRows.filter(Boolean)
-      : bomRows;
+    const availableSeparatorRows = Math.max(
+      0,
+      minimumPageCount * BOM_ROWS_PER_SHEET - actualBomItemCount
+    );
+    let retainedSeparatorRows = 0;
+    const printableBomRows = bomRows.filter(row => {
+      if (row) return true;
+      if (retainedSeparatorRows >= availableSeparatorRows) return false;
+      retainedSeparatorRows += 1;
+      return true;
+    });
     const pageCount = Math.max(1, Math.ceil(printableBomRows.length / BOM_ROWS_PER_SHEET));
     const worksheets = [templateWorksheet];
     for (let page = 2; page <= pageCount; page++) {
