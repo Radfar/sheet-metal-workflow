@@ -108,6 +108,20 @@ This is intentionally a test before adding PDF data into the main BOM workflow. 
 Scanned/image-only PDFs will require OCR in a later step.
 
 
+
+## DXF ↔ PDF engineering verification
+
+The project workspace now includes a browser-side DXF verification audit.
+
+- Every discovered DXF file is inspected locally; DXF bytes are never uploaded to the server.
+- The audit checks the DXF filename metadata for fixture tag, material code and flat-pattern dimensions.
+- ASCII/text DXFs are inspected for supported geometry entities and a coordinate envelope. Binary/non-text DXFs remain valid source files, but their geometry is reported as not parsed.
+- Each DXF is cross-checked against the extracted PDF text for component identity and filename dimensions, and against the SolidWorks BOM for a possible part-number association.
+- The fixture PDF page 1 is also checked against the project schedule for fixture tag and scheduled quantity.
+- Results are shown as **OK**, **REVIEW**, or **ERROR**. REVIEW means engineering inspection is required; it does not automatically mean the DXF or drawing is wrong.
+- PDF dimension matching is evidence-based text matching, not geometric proof. Filename flat-pattern dimensions and finished/profile dimensions must not be treated as interchangeable.
+- The previous manual DXF filename-entry section is no longer shown in the web UI. Its underlying parsing controls remain hidden for compatibility with the existing workflow.
+
 ## Consolidated Laser Order Request (initial implementation)
 
 The project workspace includes a project-level Laser Order Request generator.
