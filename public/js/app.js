@@ -66,7 +66,7 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-const PDF_ANALYSIS_LAST_SCHEDULE_ROW = 14;
+const PDF_ANALYSIS_LAST_SCHEDULE_ROW = 24;
 
 function renderPdfAnalysis() {
   const scopedSchedule = schedule.slice(0, PDF_ANALYSIS_LAST_SCHEDULE_ROW);
@@ -80,13 +80,12 @@ function renderPdfAnalysis() {
     const savedPages = fixtureData[item.tag]?.drawingPages || [];
     if (!savedPages.length) continue;
     const analysis = analyzeDrawingPages(savedPages, item.tag);
-    const checks = new Map(analysis.pageChecks.map(check => [check.pageNumber, check.result]));
+    const checkSummary = analysis.pageChecks.map(check =>
+      "p" + check.pageNumber + " — " + check.role + ": " + check.result
+    ).join(" | ");
     pageRows.push(
       "<tr><td>" + esc(item.tag) + "</td>" +
-      "<td>" + esc(checks.get(1) || "Not available") + "</td>" +
-      "<td>" + esc(checks.get(2) || "Not available") + "</td>" +
-      "<td>" + esc(checks.get(3) || "Not available") + "</td>" +
-      "<td>" + esc(checks.get(4) || "Not available") + "</td>" +
+      "<td>" + esc(checkSummary) + "</td>" +
       "<td>" + savedPages.length + "</td></tr>"
     );
 
@@ -104,12 +103,12 @@ function renderPdfAnalysis() {
   }
 
   $("pdfAnalysisStatus").textContent = pdfsLoaded.length
-    ? pdfsLoaded.length + " of " + scopedSchedule.length + " fixture PDFs loaded (T01A through T07); " + imported.length + " parsed into page records; " + textExtracted + " contain extractable text. " +
+    ? pdfsLoaded.length + " of " + scopedSchedule.length + " fixture PDFs loaded (schedule entries through T14; T15–T17 excluded); " + imported.length + " parsed into page records; " + textExtracted + " contain extractable text. " +
       candidateRows.length + " possible purchased-item reference(s) found. All candidates require manual verification; none are added to the BOM."
-    : "Import the project folder to analyze drawing PDFs for T01A through T07.";
+    : "Import the project folder to analyze drawing PDFs through T14 (excluding T15–T17).";
   $("pdfPageCheckRows").innerHTML = pageRows.length
     ? pageRows.join("")
-    : '<tr><td colspan="6" class="empty">No PDF page data available for T01A through T07.</td></tr>';
+    : '<tr><td colspan="3" class="empty">No PDF page data available through T14 (T15–T17 excluded).</td></tr>';
   $("pdfPurchasedRows").innerHTML = candidateRows.length
     ? candidateRows.join("")
     : '<tr><td colspan="6" class="empty">No purchased-item candidates detected yet. This does not prove that the drawings contain no purchased items.</td></tr>';
