@@ -530,10 +530,16 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           // description + process + quoted part number + manufacturing suffix.
           const suffixMatch = description.match(/\s*(\(Made in \d+pcs\.\)\s*\([^)]*\))\s*$/i);
           const manufacturingSuffix = suffixMatch ? suffixMatch[1] : "";
-          const descriptionBody = suffixMatch
-            ? description.slice(0, suffixMatch.index).trimEnd()
-            : description;
-          const isSplicePlate = partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3";
+          // SPLICE-PLT-T is a laser-cut plate, not a generic flat-pattern common part.
+          // Use its approved Shop BOM description and retain the quoted part number.
+          const descriptionBody = partNumber === "SPLICE-PLT-T"
+            ? '10 1/4" x 8" 16GA. Plt. (Laser)'
+            : suffixMatch
+              ? description.slice(0, suffixMatch.index).trimEnd()
+              : description;
+          const isSplicePlate = partNumber === "SPLICE-PLT-2" ||
+            partNumber === "SPLICE-PLT-3" ||
+            partNumber === "SPLICE-PLT-T";
           const isGusset = /GUSSET|\bGUS\b/i.test(partNumber) || /\bReturn Gusset\b/i.test(descriptionBody);
           if (descriptionBody && (isSplicePlate || descriptionBody.includes("(Laser/SM)") || descriptionBody.includes("(Laser)"))) {
             const laserMarker = descriptionBody.includes("(Laser/SM)") ? "(Laser/SM)" : "(Laser)";
