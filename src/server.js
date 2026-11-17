@@ -529,21 +529,32 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           // Keep the suffix as a separate trailing segment so the export order is:
           // description + process + quoted part number + manufacturing suffix.
           const suffixMatch = description.match(/\s*(\(Made in \d+pcs\.\)\s*\([^)]*\))\s*$/i);
-          // Apply the standard profile only to fixture channel part numbers
-          // in the Txx-y format (for example, T08-E2), not to every channel
-          // that happens to share a flat-pattern dimension.
+          // The project uses one standard channel cross-section:
+          // 7 11/16" + 9" + 7 11/16", represented by a flat-pattern width
+          // of approximately 24 3/16". Match by channel description and width,
+          // not by fixture-specific part-number format.
           const channelDimensionsMatch = description.match(
             /(?:flat\s*pattern\s*)?(\d+(?:\s+\d+\/\d+|\.\d+)?)"\s*[xX]\s*(\d+(?:\s+\d+\/\d+|\.\d+)?)"/i
           );
           const isChannelDescription = /\bCHANNEL\b|\bCHN['’]?L\b/i.test(description);
-          const isFixtureChannelPart = /^T\d{2}-[A-Z]\d+$/i.test(partNumber);
-          const channelGauge = description.match(/\b\d+GA\./i)?.[0]?.toUpperCase() || "";
+          const parseDimensionInches = value => {
+            const match = String(value || "").trim().match(/^(\d+)(?:\s+(\d+)\/(\d+)|(\.\d+))?$/);
+            if (!match) return null;
+            if (match[4]) return Number(match[1] + match[4]);
+            if (match[2]) return Number(match[1]) + Number(match[2]) / Number(match[3]);
+            return Number(match[1]);
+          };
+          const channelFlatWidth = channelDimensionsMatch
+            ? parseDimensionInches(channelDimensionsMatch[2])
+            : null;
           const isStandardProfileChannel = Boolean(
             isChannelDescription &&
-            isFixtureChannelPart &&
+            channelFlatWidth !== null &&
+            Math.abs(channelFlatWidth - 24.1875) <= 0.03 &&
             channelDimensionsMatch &&
-            channelGauge
+            description.match(/\b\d+GA\./i)
           );
+          const channelGauge = description.match(/\b\d+GA\./i)?.[0]?.toUpperCase() || "";
           const manufacturingSuffix = isStandardProfileChannel
             ? (suffixMatch ? suffixMatch[1] : "(Made in 1pcs.) (0/0)")
             : suffixMatch ? suffixMatch[1] : "";
