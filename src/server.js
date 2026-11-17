@@ -446,6 +446,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
             ? description.slice(0, suffixMatch.index).trimEnd()
             : description;
           const isSplicePlate = partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3";
+          const isGusset = /GUSSET|\bGUS\b/i.test(partNumber) || /\bReturn Gusset\b/i.test(descriptionBody);
           if (descriptionBody && (isSplicePlate || descriptionBody.includes("(Laser/SM)") || descriptionBody.includes("(Laser)"))) {
             const laserMarker = descriptionBody.includes("(Laser/SM)") ? "(Laser/SM)" : "(Laser)";
             const laserIndex = descriptionBody.lastIndexOf(laserMarker);
@@ -461,10 +462,14 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           } else if (descriptionBody) {
             richText.push({ text: descriptionBody + " ", font: baseFont });
           }
-          richText.push({
-            text: '"' + partNumber + '"',
-            font: { ...baseFont, bold: true }
-          });
+          // Gusset is a standardized common part: its approved description
+          // intentionally replaces the SolidWorks part number in the Shop BOM.
+          if (!isGusset) {
+            richText.push({
+              text: '"' + partNumber + '"',
+              font: { ...baseFont, bold: true }
+            });
+          }
           if (manufacturingSuffix) richText.push({ text: " " + manufacturingSuffix, font: baseFont });
           descriptionCell.value = { richText };
         } else {
