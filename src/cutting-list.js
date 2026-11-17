@@ -212,6 +212,7 @@ export async function buildCuttingListWorkbook(payload = {}) {
   function normalizeSharedFormulas(worksheet) {
     for (const row of worksheet._rows || []) {
       for (const cell of row?._cells || []) {
+        if (!cell) continue;
         const value = cell.value;
         if (value && typeof value === "object" && value.sharedFormula) {
           const formula = cell.formula;
