@@ -133,3 +133,19 @@ Current limitation: project, fixture BOMs, generated-status flags and selected l
 - If no gauge can be determined from C11/C16 and no verified gauge is entered in the BOM component, export stops and asks for engineering review.
 - The K column finish uses a component-specific cutting-list finish when supplied; otherwise it falls back to the fixture schedule finish.
 - The exported filename follows `{Laser order number} {order date}-{ship date}.xlsx`; dates in the same month are compacted (for example, `RA-5075 Jul 02-26.xlsx`).
+
+
+## PDF drawing analysis trial (T01A through T07)
+
+The project workspace includes a PDF analysis review panel for the first 14 schedule entries, from T01A through T07.
+
+- PDF text extraction remains client-side in the browser. The PDF files are not uploaded to the Node.js server.
+- Extracted text is retained page by page, with line breaks reconstructed from PDF text positions where available.
+- The page-check table reports what was detected on page 1 (fixture reference and quantity), pages 2–3 (channel/trough keywords), and page 4 (angle keywords). These are validation indicators, not a substitute for checking the drawing.
+- Purchased-item candidates are searched across every extracted page, not only pages 1 and 6. The initial vocabulary includes screws, Tek screws, bolts, nuts, washers, rivets, anchors, fasteners, dowels, pins, clips, connectors, hinges, magnets, grommets and inserts.
+- Each candidate retains its fixture tag, PDF page number, extracted description, source text evidence, and any explicitly detected quantity.
+- "Higher" means a recognized hardware term was accompanied by a size-like token; "Possible" means a hardware term was found without a size-like token. These are heuristic labels, not calibrated confidence scores.
+- The analysis does not infer a missing quantity, part number, unit, or purchasing status. It does not append candidates to the BOM. Engineering review is required before a later BOM-integration step.
+- Image-only/scanned PDFs still require OCR; this trial does not perform OCR.
+
+This trial is intended to measure extraction quality on the actual T01A–T07 drawings before any purchased-item candidates are allowed into the Shop-Standard BOM.
