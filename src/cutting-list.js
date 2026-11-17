@@ -205,6 +205,43 @@ export async function buildCuttingListWorkbook(payload = {}) {
     gauge11: { title: "11GA CRS", headingRow: 106, firstRow: 107, lastRow: 175 }
   };
 
+  // The original template allocates 83 rows to 16GA CRS and 69 rows to 11GA CRS.
+  // Extend the material section in-place when an order contains more lines than
+  // the template provides. Insert before the next section so its heading and
+  // following rows move down without changing the company's form structure.
+  function extendSectionRows(sectionKey, requiredLineCount) {
+    const section = sectionRows[sectionKey];
+    const capacity = section.lastRow - section.firstRow + 1;
+    const extraRows = requiredLineCount - capacity;
+    if (extraRows <= 0) return;
+
+    const insertAt = section.lastRow + 1;
+    const templateRow = section.lastRow;
+    const insertedValues = Array.from({ length: extraRows }, () => []);
+    ws.insertRows(insertAt, insertedValues, "i");
+
+    // ExcelJS inherits the row style from the row above, but copy the row
+    // height explicitly because the LOR template uses a fixed print layout.
+    for (let row = insertAt; row < insertAt + extraRows; row++) {
+      ws.getRow(row).height = ws.getRow(templateRow).height;
+      ws.getRow(row).hidden = false;
+    }
+
+    section.lastRow += extraRows;
+
+    // Any section below the inserted rows must move with the expanded section.
+    for (const [key, other] of Object.entries(sectionRows)) {
+      if (key !== sectionKey && other.headingRow > insertAt) {
+        other.headingRow += extraRows;
+        other.firstRow += extraRows;
+        other.lastRow += extraRows;
+      }
+    }
+  }
+
+  extendSectionRows("gauge16", groups.gauge16.length);
+  extendSectionRows("gauge11", groups.gauge11.length);
+
   function sectionHeadingText(section, payload) {
     const folderPrefix = section.key === "common"
       ? section.title + " / laser_dxf\\"
