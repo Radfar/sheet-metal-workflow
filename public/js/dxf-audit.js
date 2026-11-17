@@ -170,48 +170,12 @@ function pdfContainsDimension(text, value) {
   return Number.isFinite(target) && extractPdfDimensions(text).some(item => numbersClose(item.value, target, 0.02));
 }
 
-function escapeRegExp(value) {
-  return String(value || "").replace(/[.*+?^{}()|[\]\\]/g, "\\function findPdfComponentContexts(pdfPages, componentLabel) {
-  const target = normalize(componentLabel);
-  if (!target) return [];
-
-  const tokens = target.split(" ").filter(token => token.length > 1);
-  if (!tokens.length) return [];
-
-  const contexts = [];
-  for (const page of pdfPages || []) {
-    const text = String(page.text || "");
-    const normalizedText = normalize(text);
-    const normalizedTarget = tokens.join(" ");
-    let searchFrom = 0;
-
-    while (searchFrom < normalizedText.length) {
-      const index = normalizedText.indexOf(normalizedTarget, searchFrom);
-      if (index < 0) break;
-
-      contexts.push({
-        pageNumber: Number(page.pageNumber),
-        text: normalizedText.slice(Math.max(0, index - 500), Math.min(normalizedText.length, index + normalizedTarget.length + 700))
-      });
-      searchFrom = index + normalizedTarget.length;
-    }
-  }
-
-  return contexts;
-}
-");
-}
-
 function findPdfComponentContexts(pdfPages, componentLabel) {
-  const target = String(componentLabel || "").trim();
+  const target = String(componentLabel || "").trim().toUpperCase();
   if (!target) return [];
 
-  const labelPattern = target
-    .split(/\s+/)
-    .filter(Boolean)
-    .map(escapeRegExp)
-    .join("\\s+");
-  const labelRegex = new RegExp(labelPattern, "ig");
+  const targetPattern = target.split(/\s+/).filter(Boolean).join("[\\s_-]*");
+  const labelRegex = new RegExp(targetPattern, "ig");
   const contexts = [];
 
   for (const page of pdfPages || []) {
@@ -227,7 +191,6 @@ function findPdfComponentContexts(pdfPages, componentLabel) {
 
   return contexts;
 }
-
 function pdfComponentDimensionEvidence(pdfPages, componentLabel, value) {
   const target = Number(value);
   if (!Number.isFinite(target)) return { matched: false, pages: [], contextCount: 0 };
