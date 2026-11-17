@@ -438,7 +438,6 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           partNumber: "",
           description,
           quantityPerAssembly: quantity,
-          quantityUnit: String(item.quantityUnit || "").replace(/[^A-Za-z]/g, "").toUpperCase(),
           purchasedItem: true
         });
       });
@@ -552,19 +551,12 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
         }
 
         worksheet.getCell(rowNumber, 10).value = hasQuantity ? quantity : null;
-        const quantityUnit = String(component.quantityUnit || "").replace(/[^A-Za-z]/g, "").toUpperCase();
-        if (component.purchasedItem && quantityUnit && hasQuantity) {
-          worksheet.getCell(rowNumber, 10).numFmt = '0 "' + quantityUnit + '"';
-        }
 
         if (fixtureQty > 0 && hasQuantity) {
           worksheet.getCell(rowNumber, 11).value = {
             formula: "J" + rowNumber + "*I9",
             result: quantity * fixtureQty
           };
-          if (component.purchasedItem && quantityUnit) {
-            worksheet.getCell(rowNumber, 11).numFmt = '0 "' + quantityUnit + '"';
-          }
         }
       }
 
