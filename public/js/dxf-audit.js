@@ -124,7 +124,7 @@ function parsePdfDimensionToken(raw) {
     return Number(mixed[1]) + Number(mixed[3]) / denominator;
   }
 
-  const fraction = value.match(/^(\d+)\/\(\d+)$/);
+  const fraction = value.match(/^(\d+)\/(\d+)$/);
   if (fraction) {
     const denominator = Number(fraction[2]);
     if (!denominator) return null;
