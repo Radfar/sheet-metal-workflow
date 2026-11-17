@@ -70,7 +70,8 @@ const PDF_ANALYSIS_LAST_SCHEDULE_ROW = 14;
 
 function renderPdfAnalysis() {
   const scopedSchedule = schedule.slice(0, PDF_ANALYSIS_LAST_SCHEDULE_ROW);
-  const imported = scopedSchedule.filter(item => Array.isArray(fixtureData[item.tag]?.drawingPages));
+  const imported = scopedSchedule.filter(item => (fixtureData[item.tag]?.drawingPages || []).length > 0);
+  const textExtracted = imported.filter(item => fixtureData[item.tag].drawingPages.some(page => String(page.text || "").trim())).length;
   const pageRows = [];
   const candidateRows = [];
 
@@ -102,7 +103,7 @@ function renderPdfAnalysis() {
   }
 
   $("pdfAnalysisStatus").textContent = imported.length
-    ? imported.length + " of " + scopedSchedule.length + " fixtures in scope (T01A through T07) have page text. " +
+    ? imported.length + " of " + scopedSchedule.length + " fixture PDFs loaded (T01A through T07); " + textExtracted + " contain extractable text. " +
       candidateRows.length + " possible purchased-item reference(s) found. All candidates require manual verification; none are added to the BOM."
     : "Import the project folder to analyze drawing PDFs for T01A through T07.";
   $("pdfPageCheckRows").innerHTML = pageRows.length
