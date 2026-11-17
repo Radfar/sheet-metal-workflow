@@ -89,6 +89,21 @@ For project batch export, the generated workbooks are packaged in a ZIP file. Ex
 2605 - Shop-Format-BOMs.zip
 ```
 
+## Shop-Standard BOM group order
+
+The Shop-Standard BOM arranges components into the following groups, in this exact order:
+
+1. Channels
+2. Angles
+3. Splices
+4. End Caps
+5. Common Parts
+6. Gussets
+
+A blank separator row is inserted between each non-empty group. The original SolidWorks order is preserved within each group.
+
+**Gusset classification takes priority over Channel classification.** This is required because the standardized Gusset description contains the text `Chn'l`. Gussets must always appear in the final Gussets group and must never be included in Channels.
+
 ## Shop-Standard BOM component descriptions
 
 The following component description patterns are implemented in the Shop-Standard BOM export.
