@@ -310,7 +310,7 @@ function buildShopStandardExportDescription(component) {
     const dimensions = gauge ? description.replace(gauge, "").trim() : description;
     description = [dimensions, gauge, "Plt.", "(Laser)"].filter(Boolean).join(" ");
   } else {
-    const identitySource = identity + " " + partNumber;
+    const identitySource = identity + " " + partNumber + " " + description;
     const isEndcap = /END[\s_-]*CAP|ENDCAP/i.test(identitySource);
     const isGusset = /GUSSET|\bGUS\b/i.test(identitySource);
     const isShortAngle = /SHORT[\s_-]*ANG/i.test(partNumber) || /SHORT[\s_-]*ANGLE/i.test(identity);
@@ -361,7 +361,31 @@ function buildShopStandardExportDescription(component) {
         name = "";
         description = [dimensions, gauge, "Plt.", "(Laser)", name].filter(Boolean).join(" ");
       } else if (isGusset) {
-        description = [dimensions, gauge, "Chn'l", "(Laser/SM)", name].filter(Boolean).join(" ");
+        // Gusset descriptions contain the three geometry dimensions before
+        // the gauge and the two return dimensions after "Chn'l x".
+        // Keep those dimension groups distinct in the shop description.
+        const gaugeIndex = description.search(/\b(?:16|11)GA\./i);
+        const gussetGauge = gaugeIndex >= 0
+          ? description.match(/\b(?:16|11)GA\./i)[0]
+          : gauge;
+        const geometry = gaugeIndex >= 0
+          ? description.slice(0, gaugeIndex).trim()
+          : dimensions;
+        let returnDimensions = gaugeIndex >= 0
+          ? description.slice(gaugeIndex + gussetGauge.length).trim()
+          : "";
+        returnDimensions = returnDimensions
+          .replace(/^\s*(?:(?:Chn'l|Channel)\s*)?x\s*/i, "")
+          .replace(/\bReturn\s+Gusset\b|\bGusset\b/gi, "")
+          .replace(/\s+/g, " ").trim();
+        description = [
+          geometry,
+          gussetGauge,
+          "Chn'l",
+          returnDimensions ? "x " + returnDimensions : "",
+          "Return Gusset",
+          "(Laser/SM)"
+        ].filter(Boolean).join(" ");
       } else if (isShortAngle) {
         description = [dimensions, gauge, "(Laser/SM)", name].filter(Boolean).join(" ");
       } else {
