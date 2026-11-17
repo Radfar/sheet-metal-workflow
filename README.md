@@ -88,7 +88,7 @@ The manufacturing-data editor displays field-level examples drawn from the previ
 - Upload the Stellar logo and radio-button graphic once as PNG or JPEG images (maximum 2 MB each). They are saved on the application server and automatically embedded in A1:D7 and G1:K7, respectively, on every exported worksheet. They do not need to be uploaded for each BOM.
 - Rows 8 through 42 have a fixed height of 33 pixels (24.75 points in Excel row-height units). Rows 1 through 7 retain their image-area layout.
 - Footer labels are written at A38 (Finish Date), G38 (Shift Date), K38 (Track Number #1), A39 (Note), A42 (Cut By), and H42 (Cut Date). The print area is A1:K42.
-- Each BOM worksheet contains up to 25 table rows, beginning at row 12. Item numbers in column A start at 1 in A12, are bold, and continue sequentially across additional BOM worksheets (for example, item 26 starts on BOM page 2 when the first 25 table rows are used).
+- Each BOM worksheet contains up to 25 table rows, beginning at row 12. Item numbers in column A start at 1 in A12, are bold, and continue sequentially across additional BOM worksheets. Blank group-separator rows remain unnumbered; numbering continues with the next actual BOM item on the following row or worksheet.
 - Both branding images and the footer are repeated on each worksheet when a BOM spans multiple sheets.
 - Branding images are stored in the local `data/template-assets.json` file at runtime; keep this data directory persistent when deploying or moving the application.
 
