@@ -1,5 +1,5 @@
 const PURCHASED_ITEM_PATTERN =
-  /(?:#\s*\d+\s*)?(?:RH\s+)?(?:TEK\s+)?(?:SELF[- ]DRILLING\s+)?(?:SELF[- ]TAPPING\s+)?(?:SCREW|BOLT|NUT|WASHER|RIVET|ANCHOR|FASTENER|DOWEL|PIN|CLIP|CONNECTOR|HINGE|MAGNET|GROMMET|INSERT)\b/i;
+  /(?:#\s*\d+\s*)?(?:RH\s+)?(?:TEK\s+)?(?:SELF[- ]DRILLING\s+)?(?:SELF[- ]TAPPING\s+)?(?:SCREWS?|BOLTS?|NUTS?|WASHERS?|RIVETS?|ANCHORS?|FASTENERS?|DOWELS?|PINS?|CLIPS?|CONNECTORS?|HINGES?|MAGNETS?|GROMMETS?|INSERTS?)\b/i;
 
 const SIZE_PATTERN =
   /#\s*\d+|\b\d+(?:\s+\d+\/\d+|\/\d+|\.\d+)?\s*(?:["″]|\b(?:IN|INCH|MM)\b)/i;
