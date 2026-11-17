@@ -530,7 +530,13 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           throw new Error("Missing SolidWorks part number for BOM item " + (component.itemNo || rowNumber - 11) + ".");
         }
 
-        if (component.purchasedItem) {
+        // The SolidWorks BOM may identify this purchased hardware simply as "NUT".
+        // Standardize that exact item identity in the exported BOM description.
+        const isGenericNut = !component.purchasedItem &&
+          (partNumber.toUpperCase() === "NUT" || description.toUpperCase() === "NUT");
+        if (isGenericNut) {
+          descriptionCell.value = "10-32 HEX NYLOCK NUT (PAINT TO MATCH)";
+        } else if (component.purchasedItem) {
           descriptionCell.value = description;
         } else if (shopFormat && partNumber) {
           const baseFont = { ...(descriptionCell.font || {}) };
