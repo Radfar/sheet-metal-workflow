@@ -186,8 +186,8 @@ export function analyzeDrawingPages(pages, fixtureTag = "") {
 export function mapPurchasedItemsToBomRows(purchasedItems) {
   return (Array.isArray(purchasedItems) ? purchasedItems : []).map((candidate, index) => {
     const quantityText = String(candidate.quantity || "");
-    const quantityMatch = quantityText.match(/(?:^|\\bQTY\\.?\\s*[:=#-]?\\s*)(\\d+(?:\\.\\d+)?)/i);
-    const quantityUnitMatch = quantityText.match(/\\b(SETS?|PCS?|EA|EACH)\\b/i);
+    const quantityMatch = quantityText.match(/(?:^|\bQTY\.?\s*[:=#-]?\s*)(\d+(?:\.\d+)?)/i);
+    const quantityUnitMatch = quantityText.match(/\b(SETS?|PCS?|EA|EACH)\b/i);
     return {
       itemNo: "P" + (index + 1),
       purchasedItem: true,
