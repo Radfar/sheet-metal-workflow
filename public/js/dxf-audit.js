@@ -14,6 +14,25 @@ function numbersClose(a, b, tolerance = 0.02) {
   return Number.isFinite(x) && Number.isFinite(y) && Math.abs(x - y) <= tolerance;
 }
 
+function parseDxfUnits(text) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n");
+  for (let i = 0; i + 3 < lines.length; i++) {
+    if (String(lines[i]).trim() !== "9" || String(lines[i + 1]).trim().toUpperCase() !== "$INSUNITS") continue;
+    if (String(lines[i + 2]).trim() !== "70") continue;
+    const code = Number(String(lines[i + 3]).trim());
+    const units = {
+      0: { name: "Unitless", toInches: null },
+      1: { name: "Inches", toInches: 1 },
+      2: { name: "Feet", toInches: 12 },
+      4: { name: "Millimeters", toInches: 1 / 25.4 },
+      5: { name: "Centimeters", toInches: 1 / 2.54 },
+      6: { name: "Meters", toInches: 39.37007874015748 }
+    }[code] || { name: "DXF unit code " + code, toInches: null };
+    return { code, ...units };
+  }
+  return { code: null, name: "Unknown", toInches: null };
+}
+
 function parseAsciiDxf(text) {
   const lines = String(text || "").replace(/\r/g, "").split("\n");
   const entities = [];
@@ -72,12 +91,14 @@ function parseAsciiDxf(text) {
       }
     : null;
 
+  const units = parseDxfUnits(text);
   return {
     format: "ASCII DXF",
     entityCount: entities.length,
     geometryEntityCount: geometry.length,
     entityTypes: [...new Set(entities.map(entity => entity.type))].sort(),
-    extents
+    extents,
+    units
   };
 }
 
@@ -92,6 +113,7 @@ async function readDxfAudit(file) {
       entityTypes: [],
       extents: null,
       geometryStatus: "Not parsed",
+      units: { code: null, name: "Unknown", toInches: null },
       warning: "DXF contains binary/null bytes; filename metadata was checked, but geometry was not parsed."
     };
   }
