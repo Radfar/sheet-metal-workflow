@@ -16,6 +16,7 @@ let selectedProjectRootName = "";
 let importedProjectTags = [];
 let discoveredProjectTags = [];
 let projectImportInProgress = false;
+let projectBatchExportInProgress = false;
 
 
 function makeBomFilename() {
@@ -668,7 +669,7 @@ function updateProjectBatchButtonState() {
         Boolean(saved?.sourceFiles?.drawingPdf) &&
         Array.isArray(saved?.sourceFiles?.dxfFilenames) && saved.sourceFiles.dxfFilenames.length > 0;
     });
-  $("projectShopBtn").disabled = projectImportInProgress || !allFixturesReady;
+  $("projectShopBtn").disabled = projectImportInProgress || projectBatchExportInProgress || !allFixturesReady;
   return allFixturesReady;
 }
 function updateLaserOrderButtonState() {
@@ -1334,7 +1335,8 @@ async function generateProjectBatch(savePickerResult) {
     return;
   }
 
-  button.disabled = true;
+  projectBatchExportInProgress = true;
+  updateProjectBatchButtonState();
   $("projectBatchStatus").textContent = "Generating Shop-format BOM workbooks…";
 
   try {
@@ -1441,7 +1443,8 @@ async function generateProjectBatch(savePickerResult) {
       : error.message;
     $("projectBatchStatus").className = error.name === "AbortError" ? "status-text" : "error";
   } finally {
-    button.disabled = false;
+    projectBatchExportInProgress = false;
+    updateProjectBatchButtonState();
   }
 }
 $("projectShopBtn").addEventListener("click", () => {
