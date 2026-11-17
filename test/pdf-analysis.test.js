@@ -106,6 +106,7 @@ test("standardizes the Nylok nut description and maps SETS as a plain numeric qu
   assert.deepEqual(rows.map(row => row.itemNo), ["P1", "P2", "P3"]);
   assert.deepEqual(rows.map(row => row.quantityPerAssembly), [40, 12, ""]);
   assert.equal(rows[0].description, "10-32 HEX NYLOCK NUT (PAINT TO MATCH)");
+  assert.equal(rows[1].description, '#8 RH Tek Screw x 1/2"');
   assert.ok(rows.every(row => row.purchasedItem));
   assert.equal(rows[2].description, "Tek Screw");
   assert.ok(rows.every(row => !Object.hasOwn(row, "quantityUnit")));
