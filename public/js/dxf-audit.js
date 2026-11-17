@@ -113,9 +113,106 @@ function extractPdfNumbers(text) {
   return String(text || "").match(NUMBER_PATTERN)?.map(Number) || [];
 }
 
+function parsePdfDimensionToken(raw) {
+  const value = String(raw || "").trim().replace(/″/g, '"');
+  if (!value) return null;
+
+  const mixed = value.match(/^(\\d+)\\s+(\\d+)\\/(\\d+)$/);
+  if (mixed) {
+    const denominator = Number(mixed[3]);
+    if (!denominator) return null;
+    return Number(mixed[1]) + Number(mixed[2]) / denominator;
+  }
+
+  const fraction = value.match(/^(\\d+)\\/(\\d+)$/);
+  if (fraction) {
+    const denominator = Number(fraction[2]);
+    if (!denominator) return null;
+    return Number(fraction[1]) / denominator;
+  }
+
+  const decimal = Number(value);
+  return Number.isFinite(decimal) ? decimal : null;
+}
+
+function extractPdfDimensions(text) {
+  const source = String(text || "")
+    .replace(/\\r/g, "")
+    .replace(/\\u00a0/g, " ");
+
+  const values = [];
+  const mixedFractionPattern = /\\b\\d+\\s+\\d+\\/\\d+\\b/g;
+  const fractionPattern = /\\b\\d+\\/\\d+\\b/g;
+  const decimalPattern = /\\b\\d+(?:\\.\\d+)\\b/g;
+
+  for (const match of source.matchAll(mixedFractionPattern)) {
+    const value = parsePdfDimensionToken(match[0]);
+    if (value !== null) values.push({ value, raw: match[0], index: match.index });
+  }
+
+  for (const match of source.matchAll(fractionPattern)) {
+    if (match.index !== undefined && values.some(item => match.index >= item.index && match.index < item.index + item.raw.length)) continue;
+    const value = parsePdfDimensionToken(match[0]);
+    if (value !== null) values.push({ value, raw: match[0], index: match.index });
+  }
+
+  for (const match of source.matchAll(decimalPattern)) {
+    if (match.index !== undefined && values.some(item => match.index >= item.index && match.index < item.index + item.raw.length)) continue;
+    const value = parsePdfDimensionToken(match[0]);
+    if (value !== null) values.push({ value, raw: match[0], index: match.index });
+  }
+
+  return values;
+}
+
 function pdfContainsDimension(text, value) {
   const target = Number(value);
-  return Number.isFinite(target) && extractPdfNumbers(text).some(number => numbersClose(number, target, 0.02));
+  return Number.isFinite(target) && extractPdfDimensions(text).some(item => numbersClose(item.value, target, 0.02));
+}
+
+function findPdfComponentContexts(pdfPages, componentLabel) {
+  const target = normalize(componentLabel);
+  if (!target) return [];
+
+  const tokens = target.split(" ").filter(token => token.length > 1);
+  if (!tokens.length) return [];
+
+  const contexts = [];
+  for (const page of pdfPages || []) {
+    const text = String(page.text || "");
+    const normalizedText = normalize(text);
+    const normalizedTarget = tokens.join(" ");
+    let searchFrom = 0;
+
+    while (searchFrom < normalizedText.length) {
+      const index = normalizedText.indexOf(normalizedTarget, searchFrom);
+      if (index < 0) break;
+
+      contexts.push({
+        pageNumber: Number(page.pageNumber),
+        text: normalizedText.slice(Math.max(0, index - 500), Math.min(normalizedText.length, index + normalizedTarget.length + 700))
+      });
+      searchFrom = index + normalizedTarget.length;
+    }
+  }
+
+  return contexts;
+}
+
+function pdfComponentDimensionEvidence(pdfPages, componentLabel, value) {
+  const target = Number(value);
+  if (!Number.isFinite(target)) return { matched: false, pages: [], contextCount: 0 };
+
+  const contexts = findPdfComponentContexts(pdfPages, componentLabel);
+  const matches = contexts.filter(context =>
+    extractPdfDimensions(context.text).some(item => numbersClose(item.value, target, 0.02))
+  );
+
+  return {
+    matched: matches.length > 0,
+    pages: [...new Set(matches.map(match => match.pageNumber))],
+    contextCount: contexts.length
+  };
 }
 
 function pdfContainsLabel(text, label) {
@@ -186,14 +283,27 @@ export async function auditDxfFiles(dxfEntries, dxfMetadata, pdfPages, fixtureTa
         "DXF component identity was not clearly found in the extracted PDF text."
     ));
 
-    const pdfDimensionMatches = dimensionValues.map(value => pdfContainsDimension(pdfText, value));
-    const dimensionsInPdf = pdfDimensionMatches.length === 2 && pdfDimensionMatches.every(Boolean);
+    const componentDimensionEvidence = dimensionValues.map(value =>
+      pdfComponentDimensionEvidence(pdfPages, dxf.componentLabel, value)
+    );
+    const dimensionsInComponentPdf = dimensionValues.length === 2 &&
+      componentDimensionEvidence.every(evidence => evidence.matched);
+    const componentPdfPages = [...new Set(componentDimensionEvidence.flatMap(evidence => evidence.pages))];
+    const pdfDimensionDetail = dimensionValues.length === 2
+      ? componentDimensionEvidence.map((evidence, index) =>
+          (evidence.matched ? "DXF " + dimensionValues[index] + " matched near " + dxf.componentLabel :
+            "DXF " + dimensionValues[index] + " was not found near " + dxf.componentLabel) +
+          (evidence.pages.length ? " on PDF page(s) " + evidence.pages.join(", ") : "")
+        ).join("; ")
+      : "PDF component-dimension comparison skipped because DXF filename dimensions are incomplete.";
+
     fileChecks.push(makeCheck(
-      dimensionsInPdf ? "OK" : "WARNING",
+      dimensionsInComponentPdf ? "OK" : "ERROR",
       dimensionValues.length === 2
-        ? (dimensionsInPdf ? "Both DXF filename dimensions were found in the PDF text." :
-          "One or both DXF filename dimensions were not found in the PDF text.")
-        : "PDF dimension comparison skipped because DXF filename dimensions are incomplete."
+        ? (dimensionsInComponentPdf
+            ? "Both DXF filename dimensions match dimensions found in the PDF context for " + dxf.componentLabel + ". " + pdfDimensionDetail
+            : "DXF filename dimensions do not match the dimensions found in the PDF context for " + dxf.componentLabel + ". " + pdfDimensionDetail)
+        : pdfDimensionDetail
     ));
 
     const bomMatch = findBomMatch(dxf, bomComponents, fixtureTag);
