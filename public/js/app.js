@@ -1,5 +1,5 @@
 import { discoverProjectFixtureEntries } from "./project-folder.js";
-import { analyzeDrawingPages, mapPurchasedItemsToBomRows } from "./pdf-analysis.js";
+import { analyzeDrawingPages, mapPurchasedItemsToBomRows, calculateGussetQuantity } from "./pdf-analysis.js";
 const $ = id => document.getElementById(id);
 
 let components = [];
@@ -116,13 +116,7 @@ function renderPdfAnalysis() {
 
 function getGussetQuantityForFixture(tag) {
   const fixtureComponents = fixtureData[tag]?.components || (tag === currentFixtureTag ? components : []);
-  return fixtureComponents.reduce((total, component) => {
-    const identity = [component.partNumber, component.description, component.componentType]
-      .filter(Boolean).join(" ").toUpperCase();
-    if (!/GUSSET|\\bGUS\\b/.test(identity)) return total;
-    const quantity = Number(component.quantityPerAssembly);
-    return Number.isFinite(quantity) && quantity >= 0 ? total + quantity : total;
-  }, 0);
+  return calculateGussetQuantity(fixtureComponents);
 }
 
 function getPurchasedItemsForFixture(tag) {
