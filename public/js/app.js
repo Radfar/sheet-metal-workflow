@@ -324,7 +324,7 @@ function buildShopStandardExportDescription(component) {
     const hasApprovedChannelProfile = Boolean(channelDimensions &&
       channelDimensions[2].replace(/\s+/g, " ").trim() === "24 3/16");
     const isSpecialFixtureChannel = isFixturePartId && isChannelSource && hasApprovedChannelProfile;
-    const isFixtureTroughPart = isFixturePartId && isChannelSource;
+    const isFixtureTroughPart = isFixturePartId && /\bTROUGH\b|\bCHANNEL\b|\bCHN'L\b/i.test(troughSource);
     const isTroughSection = !isSpecialFixtureChannel &&
       (isFixtureTroughPart || /\bTROUGH\s+SECTION\b/i.test(troughSource));
 
