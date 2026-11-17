@@ -225,6 +225,14 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
   normalizeSharedFormulas(ws);
 
+  // ExcelJS does not move merged ranges when rows are inserted. Drop the template's
+  // merges below the column-heading row now and rebuild them once the final row
+  // layout is known (see mergeSectionRows below).
+  for (const range of [...ws.model.merges]) {
+    const firstRow = Number(String(range).match(/[A-Z]+(\d+)/)?.[1]);
+    if (firstRow >= 8) ws.unMergeCells(range);
+  }
+
   // The original template allocates 83 rows to 16GA CRS and 69 rows to 11GA CRS.
   // Extend the material section in-place when an order contains more lines than
   // the template provides. Insert before the next section so its heading and
@@ -284,9 +292,9 @@ export async function buildCuttingListWorkbook(payload = {}) {
     ws.getCell(section.headingRow, 2).value = null;
     for (let row = section.firstRow; row <= section.lastRow; row++) {
       ws.getRow(row).hidden = false;
-      // Clear both the left-hand (COMMON / 16GA) and right-hand (11GA)
-      // data blocks so values from the template or a prior export cannot remain.
-      for (const column of [1, 2, 3, 4, 5, 6, 8, 9, 10, 11]) {
+      // Clear the RA-5075 data columns (A, B:G merged name, H:K) so values from
+      // the template or a prior export cannot remain.
+      for (const column of [1, 2, 8, 9, 10, 11]) {
         ws.getCell(row, column).value = null;
       }
     }
@@ -316,11 +324,9 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
     ws.getCell(layout.headingRow, 2).value = sectionHeadingText({ ...layout, key: section.key }, payload);
 
-    // The original LOR template uses two distinct data blocks:
-    // COMMON / 16GA on the left (B:F), and 11GA on the right (H:K).
-    const columns = section.key === "gauge11"
-      ? { filename: 2, material: 8, gauge: 9, quantity: 10, finish: 11 }
-      : { filename: 2, material: 3, gauge: 4, quantity: 5, finish: 6 };
+    // RA-5075 layout, identical in all three sections:
+    // A item no., B:G merged DXF name, H material, I thickness, J quantity, K finish.
+    const columns = { filename: 2, material: 8, gauge: 9, quantity: 10, finish: 11 };
 
     lines.forEach((line, index) => {
       const row = layout.firstRow + index;
@@ -334,6 +340,14 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
     for (let row = layout.firstRow + lines.length; row <= layout.lastRow; row++) {
       ws.getRow(row).hidden = true;
+    }
+  }
+
+  // Rebuild the merged cells for the final layout: heading rows B:K, data rows B:G.
+  for (const layout of Object.values(sectionRows)) {
+    ws.mergeCells(layout.headingRow, 2, layout.headingRow, 11);
+    for (let row = layout.firstRow; row <= layout.lastRow; row++) {
+      ws.mergeCells(row, 2, row, 7);
     }
   }
 
