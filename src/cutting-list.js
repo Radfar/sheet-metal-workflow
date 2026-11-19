@@ -51,7 +51,7 @@ function classifyMaterial(component, dxf, fixture) {
   const code = clean(component.materialCode || dxf?.materialCode).toUpperCase();
   const material = clean(component.materialGrade) || (code === "C11" || code === "C16" ? "CRS" : (dxf ? "" : "TBD"));
   const description = clean(component.description);
-  const gauge = clean(component.gauge) || description.match(/\b(?:11|16)GA\.?/i)?.[0]?.replace(/\.$/, "") || (code === "C11" ? "11GA" : code === "C16" ? "16GA" : "");
+  const gauge = (clean(component.gauge) || description.match(/\b(?:11|16)GA\.?/i)?.[0] || (code === "C11" ? "11GA" : code === "C16" ? "16GA" : "")).replace(/\.$/, "").toUpperCase();
   if (!material || !gauge) throw new Error("Cannot classify " + clean(component.partNumber) + " in " + clean(fixture.fixtureTag) + ". Enter material grade and thickness/gauge in Manufacturing data; the DXF is missing.");
   return { material, gauge, finish: clean(component.cuttingListFinish) || clean(fixture.finish) };
 }
