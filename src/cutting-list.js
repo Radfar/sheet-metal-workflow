@@ -205,6 +205,74 @@ export async function buildCuttingListWorkbook(payload = {}) {
     gauge11: { title: "11GA CRS", headingRow: 106, firstRow: 107, lastRow: 175 }
   };
 
+  // ExcelJS preserves shared-formula metadata from the template. When rows are
+  // inserted, that metadata can leave a clone pointing at a moved/nonexistent
+  // master (for example A205). Convert shared formulas to ordinary formulas before
+  // changing the row structure so the exported workbook remains valid.
+  function normalizeSharedFormulas(worksheet) {
+    for (const row of worksheet._rows || []) {
+      for (const cell of row?._cells || []) {
+        if (!cell) continue;
+        const value = cell.value;
+        if (value && typeof value === "object" && value.sharedFormula) {
+          const formula = cell.formula;
+          const result = cell.result;
+          cell.value = formula ? { formula, result } : result ?? null;
+        }
+      }
+    }
+  }
+
+  normalizeSharedFormulas(ws);
+
+  // ExcelJS does not move merged ranges when rows are inserted. Drop the template's
+  // merges below the column-heading row now and rebuild them once the final row
+  // layout is known (see mergeSectionRows below).
+  for (const range of [...ws.model.merges]) {
+    const firstRow = Number(String(range).match(/[A-Z]+(\d+)/)?.[1]);
+    if (firstRow >= 8) ws.unMergeCells(range);
+  }
+
+  // The original template allocates 83 rows to 16GA CRS and 69 rows to 11GA CRS.
+  // Extend the material section in-place when an order contains more lines than
+  // the template provides. Insert before the next section so its heading and
+  // following rows move down without changing the company's form structure.
+  function extendSectionRows(sectionKey, requiredLineCount) {
+    const section = sectionRows[sectionKey];
+    const capacity = section.lastRow - section.firstRow + 1;
+    const extraRows = requiredLineCount - capacity;
+    if (extraRows <= 0) return;
+
+    const insertAt = section.lastRow + 1;
+    const templateRow = section.lastRow;
+    const insertedValues = Array.from({ length: extraRows }, () => []);
+    ws.insertRows(insertAt, insertedValues, "i");
+
+    // ExcelJS inherits the row style from the row above, but copy the row
+    // height explicitly because the LOR template uses a fixed print layout.
+    for (let row = insertAt; row < insertAt + extraRows; row++) {
+      ws.getRow(row).height = ws.getRow(templateRow).height;
+      ws.getRow(row).hidden = false;
+    }
+
+    section.lastRow += extraRows;
+
+    // Any section below the inserted rows must move with the expanded section.
+    for (const [key, other] of Object.entries(sectionRows)) {
+      // The following section starts exactly at insertAt, so it must move too.
+      // Using > here leaves its heading/data indices behind while ExcelJS shifts
+      // the actual worksheet rows, causing the two material sections to overlap.
+      if (key !== sectionKey && other.headingRow >= insertAt) {
+        other.headingRow += extraRows;
+        other.firstRow += extraRows;
+        other.lastRow += extraRows;
+      }
+    }
+  }
+
+  extendSectionRows("gauge16", groups.gauge16.length);
+  extendSectionRows("gauge11", groups.gauge11.length);
+
   function sectionHeadingText(section, payload) {
     const folderPrefix = section.key === "common"
       ? section.title + " / laser_dxf\\"
@@ -224,6 +292,8 @@ export async function buildCuttingListWorkbook(payload = {}) {
     ws.getCell(section.headingRow, 2).value = null;
     for (let row = section.firstRow; row <= section.lastRow; row++) {
       ws.getRow(row).hidden = false;
+      // Clear the RA-5075 data columns (A, B:G merged name, H:K) so values from
+      // the template or a prior export cannot remain.
       for (const column of [1, 2, 8, 9, 10, 11]) {
         ws.getCell(row, column).value = null;
       }
@@ -254,18 +324,30 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
     ws.getCell(layout.headingRow, 2).value = sectionHeadingText({ ...layout, key: section.key }, payload);
 
+    // RA-5075 layout, identical in all three sections:
+    // A item no., B:G merged DXF name, H material, I thickness, J quantity, K finish.
+    const columns = { filename: 2, material: 8, gauge: 9, quantity: 10, finish: 11 };
+
     lines.forEach((line, index) => {
       const row = layout.firstRow + index;
       ws.getCell(row, 1).value = index + 1;
-      ws.getCell(row, 2).value = line.dxfFilename;
-      ws.getCell(row, 8).value = line.material;
-      ws.getCell(row, 9).value = line.gauge;
-      ws.getCell(row, 10).value = line.quantity;
-      ws.getCell(row, 11).value = line.finish;
+      ws.getCell(row, columns.filename).value = line.dxfFilename;
+      ws.getCell(row, columns.material).value = line.material;
+      ws.getCell(row, columns.gauge).value = line.gauge;
+      ws.getCell(row, columns.quantity).value = line.quantity;
+      ws.getCell(row, columns.finish).value = line.finish;
     });
 
     for (let row = layout.firstRow + lines.length; row <= layout.lastRow; row++) {
       ws.getRow(row).hidden = true;
+    }
+  }
+
+  // Rebuild the merged cells for the final layout: heading rows B:K, data rows B:G.
+  for (const layout of Object.values(sectionRows)) {
+    ws.mergeCells(layout.headingRow, 2, layout.headingRow, 11);
+    for (let row = layout.firstRow; row <= layout.lastRow; row++) {
+      ws.mergeCells(row, 2, row, 7);
     }
   }
 

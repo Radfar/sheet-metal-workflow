@@ -420,38 +420,48 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
       bomRows.push(...groupedComponents[group]);
     });
 
-    // PDF-derived purchased items are kept separate from the SolidWorks component
-    // groups and appended at the bottom, preceded by one completely blank row.
-    if (purchasedItems.length) {
+    // Append valid PDF-derived purchased items after the fabricated BOM groups.
+    // Exactly one blank row separates the purchased section from the last BOM group.
+    const purchasedBomRows = purchasedItems.flatMap((item, index) => {
+      const description = String(item.description || "").trim();
+      if (!description) return [];
+      const rawQuantity = item.quantityPerAssembly;
+      const hasQuantity = rawQuantity !== "" && rawQuantity !== null && rawQuantity !== undefined;
+      const quantity = hasQuantity ? Number(rawQuantity) : "";
+      if (hasQuantity && (!Number.isFinite(quantity) || quantity < 0)) {
+        throw new Error("Invalid detected quantity for purchased item: " + description);
+      }
+      return [{
+        itemNo: item.itemNo || "P" + (index + 1),
+        partNumber: "",
+        description,
+        quantityPerAssembly: quantity,
+        purchasedItem: true
+      }];
+    });
+    if (purchasedBomRows.length) {
       if (bomRows.length) bomRows.push(null);
-      purchasedItems.forEach((item, index) => {
-        const description = String(item.description || "").trim();
-        if (!description) return;
-        const rawQuantity = item.quantityPerAssembly;
-        const hasQuantity = rawQuantity !== "" && rawQuantity !== null && rawQuantity !== undefined;
-        const quantity = hasQuantity ? Number(rawQuantity) : "";
-        if (hasQuantity && (!Number.isFinite(quantity) || quantity < 0)) {
-          throw new Error("Invalid detected quantity for purchased item: " + description);
-        }
-        bomRows.push({
-          itemNo: item.itemNo || "P" + (index + 1),
-          partNumber: "",
-          description,
-          quantityPerAssembly: quantity,
-          purchasedItem: true
-        });
-      });
+      bomRows.push(...purchasedBomRows);
     }
 
-    // Preserve classified-group separator rows whenever they do not create
-    // an additional printed page. If separators alone would push the BOM onto
-    // another page, compact them so the number of pages is driven by real items.
+    // Preserve as many group separators as the minimum required page count can hold.
+    // This uses otherwise-empty rows at the bottom of a page (for example, T08)
+    // instead of dropping every separator when the full set would overflow.
+    // Actual BOM items always take priority; excess separators are omitted only
+    // when necessary to prevent an avoidable additional page.
     const actualBomItemCount = bomRows.filter(Boolean).length;
     const minimumPageCount = Math.max(1, Math.ceil(actualBomItemCount / BOM_ROWS_PER_SHEET));
-    const rowsWithSeparatorsPageCount = Math.max(1, Math.ceil(bomRows.length / BOM_ROWS_PER_SHEET));
-    const printableBomRows = rowsWithSeparatorsPageCount > minimumPageCount
-      ? bomRows.filter(Boolean)
-      : bomRows;
+    const availableSeparatorRows = Math.max(
+      0,
+      minimumPageCount * BOM_ROWS_PER_SHEET - actualBomItemCount
+    );
+    let retainedSeparatorRows = 0;
+    const printableBomRows = bomRows.filter(row => {
+      if (row) return true;
+      if (retainedSeparatorRows >= availableSeparatorRows) return false;
+      retainedSeparatorRows += 1;
+      return true;
+    });
     const pageCount = Math.max(1, Math.ceil(printableBomRows.length / BOM_ROWS_PER_SHEET));
     const worksheets = [templateWorksheet];
     for (let page = 2; page <= pageCount; page++) {
@@ -520,7 +530,13 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           throw new Error("Missing SolidWorks part number for BOM item " + (component.itemNo || rowNumber - 11) + ".");
         }
 
-        if (component.purchasedItem) {
+        // The SolidWorks BOM may identify this purchased hardware simply as "NUT".
+        // Standardize that exact item identity in the exported BOM description.
+        const isGenericNut =
+          partNumber.toUpperCase() === "NUT" || description.toUpperCase() === "NUT";
+        if (isGenericNut) {
+          descriptionCell.value = "10-32 HEX NYLOCK NUT (PAINT TO MATCH)";
+        } else if (component.purchasedItem) {
           descriptionCell.value = description;
         } else if (shopFormat && partNumber) {
           const baseFont = { ...(descriptionCell.font || {}) };
@@ -529,11 +545,71 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           // Keep the suffix as a separate trailing segment so the export order is:
           // description + process + quoted part number + manufacturing suffix.
           const suffixMatch = description.match(/\s*(\(Made in \d+pcs\.\)\s*\([^)]*\))\s*$/i);
-          const manufacturingSuffix = suffixMatch ? suffixMatch[1] : "";
-          const descriptionBody = suffixMatch
-            ? description.slice(0, suffixMatch.index).trimEnd()
-            : description;
-          const isSplicePlate = partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3";
+          // The project uses one standard channel cross-section:
+          // 7 11/16" + 9" + 7 11/16", represented by a flat-pattern width
+          // of approximately 24 3/16". Match by channel description and width,
+          // not by fixture-specific part-number format.
+          const channelDimensionsMatch = description.match(
+            /(?:flat\s*pattern\s*)?(\d+(?:\s+\d+\/\d+|\.\d+)?)"\s*[xX]\s*(\d+(?:\s+\d+\/\d+|\.\d+)?)"/i
+          );
+          const isChannelDescription = /\bCHANNEL\b|\bCHN['’]?L\b/i.test(description);
+          const parseDimensionInches = value => {
+            const match = String(value || "").trim().match(/^(\d+)(?:\s+(\d+)\/(\d+)|(\.\d+))?$/);
+            if (!match) return null;
+            if (match[4]) return Number(match[1] + match[4]);
+            if (match[2]) return Number(match[1]) + Number(match[2]) / Number(match[3]);
+            return Number(match[1]);
+          };
+          const channelFlatWidth = channelDimensionsMatch
+            ? parseDimensionInches(channelDimensionsMatch[2])
+            : null;
+          const isStandardProfileChannel = Boolean(
+            isChannelDescription &&
+            channelFlatWidth !== null &&
+            Math.abs(channelFlatWidth - 24.1875) <= 0.03 &&
+            channelDimensionsMatch &&
+            description.match(/\b\d+GA\./i)
+          );
+          const channelGauge = description.match(/\b\d+GA\./i)?.[0]?.toUpperCase() || "";
+          const manufacturingSuffix = isStandardProfileChannel
+            ? (suffixMatch ? suffixMatch[1] : "(Made in 1pcs.) (0/0)")
+            : suffixMatch ? suffixMatch[1] : "";
+          // These named exceptions remain part-number-specific. The channel
+          // profile rule above is intentionally applied to every matching channel.
+          const descriptionOverrides = {
+            "SPLICE-PLT-T": '10 1/4" x 8" 16GA. Plt. (Laser)',
+            "MILLWORK-ENDCAP": '7 11/16" x 9" 16GA. Plt. (Laser)',
+            "ANGLE-CONNECTION": '1 3/8" x 1 3/8" 16GA. Angle x 5 3/4" (Laser/SM)'
+          };
+          const standardChannelDescription = isStandardProfileChannel
+            ? '7 11/16" X 9" x 7 11/16" ' + channelGauge +
+              " Chn'l x " + channelDimensionsMatch[1] + '" (Laser/SM)'
+            : null;
+          let descriptionBody = standardChannelDescription ??
+            descriptionOverrides[partNumber] ??
+            (suffixMatch ? description.slice(0, suffixMatch.index).trimEnd() : description);
+          const isSplicePlate = partNumber === "SPLICE-PLT-2" ||
+            partNumber === "SPLICE-PLT-3" ||
+            partNumber === "SPLICE-PLT-T";
+          // Shop Standard splice plates always list the smaller plate dimension first.
+          // Apply this only to SPLICE-PLT-2/-3/-T and leave all other plate/component
+          // descriptions in their source order.
+          if (isSplicePlate) {
+            const spliceDimensionsMatch = descriptionBody.match(
+              /^(\s*)(\d+(?:\s+\d+\/\d+|\.\d+)?)"(\s*[xX]\s*)(\d+(?:\s+\d+\/\d+|\.\d+)?)"/
+            );
+            if (spliceDimensionsMatch) {
+              const firstDimension = parseDimensionInches(spliceDimensionsMatch[2]);
+              const secondDimension = parseDimensionInches(spliceDimensionsMatch[4]);
+              if (firstDimension !== null && secondDimension !== null && firstDimension > secondDimension) {
+                descriptionBody = spliceDimensionsMatch[1] +
+                  spliceDimensionsMatch[4] + '"' +
+                  spliceDimensionsMatch[3] +
+                  spliceDimensionsMatch[2] + '"' +
+                  descriptionBody.slice(spliceDimensionsMatch[0].length);
+              }
+            }
+          }
           const isGusset = /GUSSET|\bGUS\b/i.test(partNumber) || /\bReturn Gusset\b/i.test(descriptionBody);
           if (descriptionBody && (isSplicePlate || descriptionBody.includes("(Laser/SM)") || descriptionBody.includes("(Laser)"))) {
             const laserMarker = descriptionBody.includes("(Laser/SM)") ? "(Laser/SM)" : "(Laser)";
@@ -554,7 +630,7 @@ app.post("/api/export-bom-xlsx", async (req, res) => {
           // intentionally replaces the SolidWorks part number in the Shop BOM.
           if (!isGusset) {
             richText.push({
-              text: '"' + partNumber + '"',
+              text: (partNumber === "ANGLE-CONNECTION" ? " " : "") + '"' + partNumber + '"',
               font: { ...baseFont, bold: true }
             });
           }
