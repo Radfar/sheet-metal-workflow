@@ -356,15 +356,16 @@ function buildShopStandardExportDescription(component) {
 
   // Explicitly classified plates use the plate shop format, even when the source
   // description says "Flat pattern ... Component" instead of "Plate".
-  if (String(component.componentType || "").trim().toLowerCase() === "plate") {
+  const isT15T16TopPlate = /^T1[56](?:-[A-Z0-9]+)*-TOP$/i.test(partNumber);
+  if (String(component.componentType || "").trim().toLowerCase() === "plate" || isT15T16TopPlate) {
     const dm = description.match(/(\d+(?:\s+\d+\/\d+|\.\d+)?)[\"″]?\s*[x×]\s*(\d+(?:\s+\d+\/\d+|\.\d+)?)[\"″]?/i);
     const length = component.plateLength || dm?.[1] || "";
     const width = component.plateWidth || dm?.[2] || "";
     const gauge = String(component.gauge || description.match(/\b\d{1,2}GA\.?/i)?.[0] || "").replace(/\s+/g, "").toUpperCase();
     if (length && width && gauge) {
       const process = String(component.manufacturingProcess || "Laser").trim() || "Laser";
-      const partId = String(component.partIdentification || partNumber).trim().replace(/^\"+|\"+$/g, "");
-      return [formatShopDimension(length), "x", formatShopDimension(width), gauge, "Plt.(" + process + ")", partId ? '\"' + partId + '\"' : ""].filter(Boolean).join(" ");
+      // The Excel exporter appends the quoted SolidWorks part number after this description.
+      return [formatShopDimension(length), "x", formatShopDimension(width), gauge, "Plt.(" + process + ")"].join(" ");
     }
   }
   if (partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3") {
