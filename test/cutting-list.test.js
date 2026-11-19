@@ -99,7 +99,7 @@ test("inserted rows retain the standard data-row style after large section expan
   const input = payload(190);
   const { buffer } = await buildCuttingListWorkbook(input);
   const ws = await load(buffer);
-  const last16 = findRow(ws, "T01A-189 TROUGH");
+  const last16 = findRow(ws, "T01A-99 TROUGH");
   assert.ok(last16 > 208);
   assert.equal(JSON.stringify(ws.getRow(last16).getCell(1).style), JSON.stringify(ws.getRow(104).getCell(1).style));
 });
