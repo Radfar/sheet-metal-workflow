@@ -354,6 +354,19 @@ function buildShopStandardExportDescription(component) {
   const partNumber = String(component.partNumber ?? "").trim().replace(/^"+|"+$/g, "");
   description = convertShopInchDimensions(description);
 
+  // Explicitly classified plates use the plate shop format, even when the source
+  // description says "Flat pattern ... Component" instead of "Plate".
+  if (String(component.componentType || "").trim().toLowerCase() === "plate") {
+    const dm = description.match(/(\d+(?:\s+\d+\/\d+|\.\d+)?)[\"″]?\s*[x×]\s*(\d+(?:\s+\d+\/\d+|\.\d+)?)[\"″]?/i);
+    const length = component.plateLength || dm?.[1] || "";
+    const width = component.plateWidth || dm?.[2] || "";
+    const gauge = String(component.gauge || description.match(/\b\d{1,2}GA\.?/i)?.[0] || "").replace(/\s+/g, "").toUpperCase();
+    if (length && width && gauge) {
+      const process = String(component.manufacturingProcess || "Laser").trim() || "Laser";
+      const partId = String(component.partIdentification || partNumber).trim().replace(/^\"+|\"+$/g, "");
+      return [formatShopDimension(length), "x", formatShopDimension(width), gauge, "Plt.(" + process + ")", partId ? '\"' + partId + '\"' : ""].filter(Boolean).join(" ");
+    }
+  }
   if (partNumber === "SPLICE-PLT-2" || partNumber === "SPLICE-PLT-3") {
     description = description.replace(/\bFlat pattern\b/gi, "")
       .replace(/\bPlate\b/gi, "").replace(/\bSplice\b/gi, "")
@@ -669,8 +682,29 @@ function updateLaserOrderButtonState() {
   $("exportCuttingListBtn").disabled = !hasSelectedGeneratedBom;
 }
 
+function isPurchasedComponent(component) {
+  const source = [component.componentType, component.partNumber, component.description].filter(Boolean).join(" ").toUpperCase();
+  return /PURCHASED\s*HARDWARE|SCREW|BOLT|NUT|WASHER|RIVET|FASTENER|HINGE|INSERT|ANCHOR/.test(source);
+}
+function isFabricatedCuttingComponent(component) {
+  if (isPurchasedComponent(component)) return false;
+  const type = String(component.componentType || "").trim().toLowerCase();
+  if (["channel", "angle", "plate", "gusset"].includes(type)) return true;
+  const source = [component.partNumber, component.description].filter(Boolean).join(" ").toUpperCase();
+  return /FLAT\s*PATTERN|TROUGH|CHANNEL|CHN[’']?L|ANGLE|\bANG\b|PLATE|\bPLT\b|END[\s_-]*CAP|ENDCAP|SPLICE|GUSSET|\bGUS\b/.test(source);
+}
 function renderComponents() {
   $("rowCount").textContent = components.length + " BOM item" + (components.length === 1 ? "" : "s");
+  const detailPanel = $("componentTreePanel");
+  if (detailPanel) detailPanel.hidden = components.length === 0;
+  const matchedCount = components.filter(component => component.dxfIndex !== "" && component.dxfIndex != null).length;
+  const missingComponents = components.filter(component => component.dxfIndex === "" || component.dxfIndex == null);
+  const fabricatedMissingCount = missingComponents.filter(isFabricatedCuttingComponent).length;
+  const purchasedCount = missingComponents.filter(isPurchasedComponent).length;
+  const reviewSummary = $("componentReviewSummary");
+  if (reviewSummary) reviewSummary.textContent = components.length
+    ? components.length + " BOM items · " + matchedCount + " matched DXFs · " + fabricatedMissingCount + " fabricated part(s) missing DXF (highlighted red in the cutting list) · " + purchasedCount + " unmatched purchased item(s) excluded from laser cutting."
+    : "Import a SolidWorks BOM to review component details before generating the BOM.";
   $("exportShopBtn").disabled = components.length === 0;
   const body = $("componentRows");
 
@@ -1698,6 +1732,9 @@ function collectProjectBomData() {
           ? null : saved.dxfFiles?.[Number(component.dxfIndex)];
         return {
           partNumber: component.partNumber,
+          description: component.description || "",
+          componentType: component.componentType || "",
+          manufacturingProcess: component.manufacturingProcess || "",
           quantityPerAssembly: component.quantityPerAssembly,
           materialCode: component.materialCode || dxf?.materialCode || "",
           materialGrade: component.materialGrade || "",
@@ -1713,68 +1750,46 @@ function collectProjectBomData() {
 
 let cuttingListPreview = [];
 function renderCuttingListPreview() {
-  const fixtures = collectProjectBomData();
-  const groups = new Map();
-  const hashFixtureMap = new Map();
-  for (const fixture of fixtures) {
-    for (const component of fixture.components) {
-      const hash = component.dxf?.sha256;
-      if (!hash) continue;
-      if (!hashFixtureMap.has(hash)) hashFixtureMap.set(hash, new Set());
-      hashFixtureMap.get(hash).add(fixture.fixtureTag);
-    }
+  const fixtures = collectProjectBomData(), groups = new Map(), hashFixtureMap = new Map();
+  for (const fixture of fixtures) for (const component of fixture.components) {
+    const hash = component.dxf?.sha256;
+    if (hash) { if (!hashFixtureMap.has(hash)) hashFixtureMap.set(hash, new Set()); hashFixtureMap.get(hash).add(fixture.fixtureTag); }
   }
   const commonHashes = new Set([...hashFixtureMap.entries()].filter(([, tags]) => tags.size > 1).map(([hash]) => hash));
-  let noDxfCount = 0;
-  for (const fixture of fixtures) {
-    for (const component of fixture.components) {
-      if (!component.dxf) { noDxfCount++; continue; }
-      const hashCommon = Boolean(component.dxf.sha256 && commonHashes.has(component.dxf.sha256));
-      const isCommon = Boolean(component.dxf.consolidationKey) ||
-        String(component.dxf.fixtureTag || "").toUpperCase() === "COMMON" ||
-        hashCommon;
-      const dxfIdentity = component.dxf.consolidationKey
-        ? "approved:" + component.dxf.consolidationKey.toLowerCase()
-        : hashCommon ? "sha256:" + component.dxf.sha256
-        : component.dxf.originalFilename.toLowerCase();
-      const materialCode = String(component.materialCode || component.dxf.materialCode || "").toUpperCase();
-      const material = component.materialGrade || (materialCode === "C11" || materialCode === "C16" ? "CRS" : "");
-      const thickness = component.gauge || (materialCode === "C11" ? "11GA" : materialCode === "C16" ? "16GA" : "");
-      const finish = component.cuttingListFinish || fixture.finish || "";
-      const key = [dxfIdentity, material.toUpperCase(), thickness.toUpperCase(), String(finish).toUpperCase()].join("|");
-      if (!groups.has(key)) groups.set(key, {
-        dxfFilename: component.dxf.originalFilename,
-        material,
-        thickness,
-        finish,
-        quantity: 0,
-        common: isCommon,
-        sources: new Set()
-      });
-      const entry = groups.get(key);
-      const qty = Number(component.quantityPerAssembly);
-      if (!Number.isFinite(qty) || qty < 0 || component.quantityPerAssembly === "") {
-        throw new Error("Invalid quantity for " + component.partNumber + " in " + fixture.fixtureTag);
-      }
-      entry.quantity += qty * Number(fixture.fixtureQuantity || 0);
-      entry.sources.add(fixture.fixtureTag);
-      if (!entry.material && component.materialCode) entry.material = component.materialCode;
+  let missingFabricatedCount = 0, excludedPurchasedCount = 0;
+  for (const fixture of fixtures) for (const component of fixture.components) {
+    const hasDxf = Boolean(component.dxf?.originalFilename);
+    if (!hasDxf) {
+      if (isPurchasedComponent(component)) { excludedPurchasedCount++; continue; }
+      if (!isFabricatedCuttingComponent(component)) continue;
+      missingFabricatedCount++;
     }
+    const hashCommon = Boolean(hasDxf && component.dxf.sha256 && commonHashes.has(component.dxf.sha256));
+    const isCommon = hasDxf && (Boolean(component.dxf.consolidationKey) || String(component.dxf.fixtureTag || "").toUpperCase() === "COMMON" || hashCommon);
+    const code = String(component.materialCode || component.dxf?.materialCode || "").toUpperCase();
+    const material = component.materialGrade || (code === "C11" || code === "C16" ? "CRS" : (hasDxf ? "" : "TBD"));
+    const gaugeText = String(component.gauge || component.description.match(/\b(?:11|16)GA\.?/i)?.[0] || "").toUpperCase();
+    const thickness = gaugeText.replace(/\.$/, "") || (code === "C11" ? "11GA" : code === "C16" ? "16GA" : "");
+    const finish = component.cuttingListFinish || fixture.finish || "";
+    const dxfFilename = hasDxf ? component.dxf.originalFilename : (component.description || component.partNumber || "Unidentified fabricated component");
+    const identity = hasDxf
+      ? (component.dxf.consolidationKey ? "approved:" + component.dxf.consolidationKey.toLowerCase() : hashCommon ? "sha256:" + component.dxf.sha256 : component.dxf.originalFilename.toLowerCase())
+      : "missing:" + fixture.fixtureTag.toLowerCase() + ":" + String(component.partNumber || component.description).toLowerCase();
+    const key = [identity, material.toUpperCase(), thickness.toUpperCase(), String(finish).toUpperCase()].join("|");
+    if (!groups.has(key)) groups.set(key, { dxfFilename, material, thickness, finish, quantity: 0, common: isCommon, missingDxf: !hasDxf, sources: new Set() });
+    const entry = groups.get(key), qty = Number(component.quantityPerAssembly);
+    if (!Number.isFinite(qty) || qty < 0 || component.quantityPerAssembly === "") throw new Error("Invalid quantity for " + component.partNumber + " in " + fixture.fixtureTag);
+    entry.quantity += qty * Number(fixture.fixtureQuantity || 0);
+    entry.sources.add(fixture.fixtureTag);
   }
-  cuttingListPreview = [...groups.values()].sort((a,b) =>
-    Number(b.common) - Number(a.common) || a.material.localeCompare(b.material) ||
-    a.thickness.localeCompare(b.thickness) || a.dxfFilename.localeCompare(b.dxfFilename)
-  );
+  cuttingListPreview = [...groups.values()].sort((a,b) => Number(b.common)-Number(a.common) || Number(a.missingDxf)-Number(b.missingDxf) || a.material.localeCompare(b.material) || a.thickness.localeCompare(b.thickness) || a.dxfFilename.localeCompare(b.dxfFilename));
   $("cuttingListRows").innerHTML = cuttingListPreview.length ? cuttingListPreview.map(line => {
-    const section = line.common ? "COMMON PARTS" : line.thickness + " CRS";
-    return "<tr><td>" + esc(line.dxfFilename) + "</td><td>" + esc(section) + "</td><td>" + esc(line.material || "—") +
-      "</td><td>" + esc(line.thickness || "—") + "</td><td>" + esc(line.quantity) +
-      "</td><td>" + esc(line.finish || "—") + "</td><td>PC</td><td>" + esc([...line.sources].join(", ")) + "</td></tr>";
-  }).join("") : '<tr><td colspan="8" class="empty">No matched DXF components found in the saved fixture BOMs.</td></tr>';
+    const section = line.common ? "COMMON PARTS" : line.thickness + " " + line.material;
+    return '<tr' + (line.missingDxf ? ' class="missing-dxf-row"' : '') + '><td>' + esc(line.dxfFilename) + "</td><td>" + esc(section) + "</td><td>" + esc(line.material || "—") + "</td><td>" + esc(line.thickness || "—") + "</td><td>" + esc(line.quantity) + "</td><td>" + esc(line.finish || "—") + "</td><td>PC</td><td>" + esc([...line.sources].join(", ")) + "</td></tr>";
+  }).join("") : '<tr><td colspan="8" class="empty">No fabricated BOM components found in the selected fixtures.</td></tr>';
   $("exportCuttingListBtn").disabled = !fixtures.length || cuttingListPreview.length === 0;
-  const commonLineCount = cuttingListPreview.filter(line => line.common).length;
-  $("cuttingListStatus").textContent = cuttingListPreview.length + " consolidated DXF line(s), including " + commonLineCount + " common line(s), from " +
-    fixtures.length + " selected, generated fixture BOM(s). " + noDxfCount + " BOM component(s) without DXF were excluded.";
+  const commonCount = cuttingListPreview.filter(line => line.common).length;
+  $("cuttingListStatus").textContent = cuttingListPreview.length + " cutting-list line(s), including " + commonCount + " common line(s), from " + fixtures.length + " selected fixture BOM(s). " + missingFabricatedCount + " fabricated component(s) without DXF are included in red; " + excludedPurchasedCount + " unmatched purchased item(s) are excluded.";
   $("cuttingListStatus").className = cuttingListPreview.length ? "ok" : "status-text";
 }
 
