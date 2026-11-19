@@ -81,7 +81,7 @@ test("sections with more lines than the template keep their names and merges", a
 test("missing-DXF fabricated parts are included in red while purchased hardware is excluded", async () => {
   const input = payload(1);
   input.fixtures[0].components.push(
-    { partNumber: "T15-A-TOP", description: '95 3/4" x 4 3/4" 11GA. Component T15-A-TOP "T15-A-TOP"', componentType: "Plate", gauge: "11GA", quantityPerAssembly: 2, dxf: null },
+    { partNumber: "T15-A-TOP", description: '95 3/4" x 4 3/4" 11GA. Component T15-A-TOP "T15-A-TOP"', componentType: "Plate", materialGrade: "CRS", gauge: "11GA", quantityPerAssembly: 2, dxf: null },
     { partNumber: "SCREW-8", description: "#8 RH Tek Screw x 1/2", componentType: "Purchased hardware", quantityPerAssembly: 4, dxf: null }
   );
   const { buffer, lineCount } = await buildCuttingListWorkbook(input);
