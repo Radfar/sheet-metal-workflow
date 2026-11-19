@@ -357,7 +357,7 @@ function buildShopStandardExportDescription(component) {
   // Any BOM item described as a "Flat pattern" is a fabricated plate for
   // shop-format output. Do not restrict this rule to T15/T16 TOP part numbers:
   // SIDE, BOTTOM and other Flat Pattern components use the same plate format.
-  const isFlatPatternComponent = /\\bflat\\s+pattern\\b/i.test(existingDescription);
+  const isFlatPatternComponent = /\bflat\s+pattern\b/i.test(existingDescription);
   const isT15T16TopPlate = /^T1[56](?:-[A-Z0-9]+)*-TOP$/i.test(partNumber);
   if (String(component.componentType || "").trim().toLowerCase() === "plate" ||
       isFlatPatternComponent || isT15T16TopPlate) {
