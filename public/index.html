@@ -126,6 +126,7 @@
   <section class="panel compact-panel" id="componentTreePanel">
     <div class="heading"><h2><b>04</b> BOM Detail</h2><small id="rowCount">0 components</small></div>
     <p class="notice">SolidWorks controls part numbers and quantities. DXF files are used for matching, material/flat-size reference and the consolidated Laser Order Request. Expand “Manufacturing data” to enter verified finished-part dimensions, gauge, component type and optional manufacturing process. The Shop-Standard export follows the approved shop naming and formatting rules. DXF dimensions and material codes are not appended to or substituted into the shop description; unknown values are omitted rather than guessed.</p>
+    <p id="componentReviewSummary" class="component-review-summary">Import a SolidWorks BOM to review component details before generating the BOM.</p>
     <div class="table-wrap">
       <table class="component-table">
         <thead><tr><th>Item</th><th>Part number</th><th>Qty / fixture</th><th>DXF match</th><th>Material</th><th>Flat size</th><th>Manufacturing description (BOM output)</th><th></th></tr></thead>
@@ -173,7 +174,7 @@
     </div>
     <div class="table-wrap summary-wrap">
       <table class="summary-table">
-        <thead><tr><th>DXF FILE NAME</th><th>SECTION</th><th>MATERIAL</th><th>THK</th><th>Q. REQ'D</th><th>FINISH</th><th>UNIT</th><th>Source BOMs</th></tr></thead>
+        <thead><tr><th>DXF FILE / BOM DESCRIPTION</th><th>SECTION</th><th>MATERIAL</th><th>THK</th><th>Q. REQ'D</th><th>FINISH</th><th>UNIT</th><th>Source BOMs</th></tr></thead>
         <tbody id="cuttingListRows"><tr><td colspan="8" class="empty">Preview the project cutting list after importing fixture BOMs.</td></tr></tbody>
       </table>
     </div>
