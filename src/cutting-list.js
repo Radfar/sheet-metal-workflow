@@ -48,14 +48,23 @@ function formatOrderShipRange(orderDate, shipDate) {
 }
 
 function classifyMaterial(component, dxf, fixture) {
-  const code = clean(component.materialCode || dxf.materialCode).toUpperCase();
-  const material = clean(component.materialGrade) || (code === "C11" || code === "C16" ? "CRS" : "");
-  const gauge = clean(component.gauge) || (code === "C11" ? "11GA" : code === "C16" ? "16GA" : "");
-  if (!material || !gauge) {
-    throw new Error("Cannot classify " + clean(component.partNumber) + " in " + clean(fixture.fixtureTag) +
-      ". Verify its DXF material code or enter Material and Thickness in the BOM component data.");
-  }
+  const code = clean(component.materialCode || dxf?.materialCode).toUpperCase();
+  const material = clean(component.materialGrade) || (code === "C11" || code === "C16" ? "CRS" : (dxf ? "" : "TBD"));
+  const description = clean(component.description);
+  const gauge = clean(component.gauge) || description.match(/\b(?:11|16)GA\.?/i)?.[0]?.replace(/\.$/, "") || (code === "C11" ? "11GA" : code === "C16" ? "16GA" : "");
+  if (!material || !gauge) throw new Error("Cannot classify " + clean(component.partNumber) + " in " + clean(fixture.fixtureTag) + ". Enter material grade and thickness/gauge in Manufacturing data; the DXF is missing.");
   return { material, gauge, finish: clean(component.cuttingListFinish) || clean(fixture.finish) };
+}
+function isPurchasedComponent(component) {
+  const source = [component.componentType, component.partNumber, component.description].filter(Boolean).join(" ").toUpperCase();
+  return /PURCHASED\s*HARDWARE|SCREW|BOLT|NUT|WASHER|RIVET|FASTENER|HINGE|INSERT|ANCHOR/.test(source);
+}
+function isFabricatedComponent(component) {
+  if (isPurchasedComponent(component)) return false;
+  const type = clean(component.componentType).toLowerCase();
+  if (["channel", "angle", "plate", "gusset"].includes(type)) return true;
+  const source = [component.partNumber, component.description].filter(Boolean).join(" ").toUpperCase();
+  return /FLAT\s*PATTERN|TROUGH|CHANNEL|CHN[’']?L|ANGLE|\bANG\b|PLATE|\bPLT\b|END[\s_-]*CAP|ENDCAP|SPLICE|GUSSET|\bGUS\b/.test(source);
 }
 
 function applyTableHeader(ws, row) {
@@ -115,21 +124,20 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
     for (const component of (Array.isArray(fixture.components) ? fixture.components : [])) {
       const dxf = component.dxf;
-      if (!dxf || !clean(dxf.originalFilename)) continue;
+      const missingDxf = !dxf || !clean(dxf.originalFilename);
+      if (missingDxf && !isFabricatedComponent(component)) continue;
       const qtyPerAssembly = Number(component.quantityPerAssembly);
       if (!Number.isFinite(qtyPerAssembly) || qtyPerAssembly < 0 || component.quantityPerAssembly === "") {
         throw new Error("Invalid BOM quantity for " + clean(component.partNumber) + " in " + fixtureTag + ".");
       }
 
       const classified = classifyMaterial(component, dxf, fixture);
-      const hashCommon = Boolean(dxf.sha256 && commonHashes.has(dxf.sha256));
-      const isCommon = Boolean(dxf.consolidationKey) ||
-        clean(dxf.fixtureTag).toUpperCase() === "COMMON" ||
-        hashCommon;
-      const dxfIdentity = dxf.consolidationKey
-        ? "approved:" + clean(dxf.consolidationKey).toLowerCase()
-        : hashCommon ? "sha256:" + clean(dxf.sha256)
-        : clean(dxf.originalFilename).toLowerCase();
+      const hashCommon = Boolean(!missingDxf && dxf.sha256 && commonHashes.has(dxf.sha256));
+      const isCommon = !missingDxf && (Boolean(dxf.consolidationKey) || clean(dxf.fixtureTag).toUpperCase() === "COMMON" || hashCommon);
+      const dxfIdentity = missingDxf
+        ? "missing:" + fixtureTag.toLowerCase() + ":" + clean(component.partNumber || component.description).toLowerCase()
+        : dxf.consolidationKey ? "approved:" + clean(dxf.consolidationKey).toLowerCase()
+          : hashCommon ? "sha256:" + clean(dxf.sha256) : clean(dxf.originalFilename).toLowerCase();
       const identity = [
         dxfIdentity,
         classified.material.toUpperCase(),
@@ -139,7 +147,8 @@ export async function buildCuttingListWorkbook(payload = {}) {
 
       if (!groupMap.has(identity)) {
         const line = {
-          dxfFilename: clean(dxf.originalFilename),
+          dxfFilename: missingDxf ? clean(component.description || component.partNumber || "Unidentified fabricated component") : clean(dxf.originalFilename),
+          missingDxf,
           material: classified.material,
           gauge: classified.gauge,
           finish: classified.finish,
@@ -244,15 +253,17 @@ export async function buildCuttingListWorkbook(payload = {}) {
     if (extraRows <= 0) return;
 
     const insertAt = section.lastRow + 1;
-    const templateRow = section.lastRow;
+    // Copy from a normal data row rather than the section boundary row.
+    const templateRow = Math.max(section.firstRow, section.lastRow - 1);
+    const templateHeight = ws.getRow(templateRow).height;
+    const templateStyles = Array.from({ length: 11 }, (_, i) => structuredClone(ws.getCell(templateRow, i + 1).style || {}));
     const insertedValues = Array.from({ length: extraRows }, () => []);
     ws.insertRows(insertAt, insertedValues, "i");
-
-    // ExcelJS inherits the row style from the row above, but copy the row
-    // height explicitly because the LOR template uses a fixed print layout.
     for (let row = insertAt; row < insertAt + extraRows; row++) {
-      ws.getRow(row).height = ws.getRow(templateRow).height;
-      ws.getRow(row).hidden = false;
+      const insertedRow = ws.getRow(row);
+      insertedRow.height = templateHeight;
+      insertedRow.hidden = false;
+      for (let column = 1; column <= 11; column++) insertedRow.getCell(column).style = structuredClone(templateStyles[column - 1]);
     }
 
     section.lastRow += extraRows;
@@ -336,6 +347,13 @@ export async function buildCuttingListWorkbook(payload = {}) {
       ws.getCell(row, columns.gauge).value = line.gauge;
       ws.getCell(row, columns.quantity).value = line.quantity;
       ws.getCell(row, columns.finish).value = line.finish;
+      if (line.missingDxf) {
+        for (const column of [1, 2, 8, 9, 10, 11]) {
+          const cell = ws.getCell(row, column);
+          cell.font = { ...(cell.font || {}), color: { argb: "FF9C0006" }, bold: true };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFE2E2" } };
+        }
+      }
     });
 
     for (let row = layout.firstRow + lines.length; row <= layout.lastRow; row++) {
