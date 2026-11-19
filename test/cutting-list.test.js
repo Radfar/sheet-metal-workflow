@@ -76,3 +76,30 @@ test("sections with more lines than the template keep their names and merges", a
   assert.equal(ws.getCell(last16, 10).value, 2);
   assert.ok(ws.getCell(last16, 3).isMerged, "extra rows keep the B:G merge");
 });
+
+
+test("missing-DXF fabricated parts are included in red while purchased hardware is excluded", async () => {
+  const input = payload(1);
+  input.fixtures[0].components.push(
+    { partNumber: "T15-A-TOP", description: '95 3/4" x 4 3/4" 11GA. Component T15-A-TOP "T15-A-TOP"', componentType: "Plate", gauge: "11GA", quantityPerAssembly: 2, dxf: null },
+    { partNumber: "SCREW-8", description: "#8 RH Tek Screw x 1/2", componentType: "Purchased hardware", quantityPerAssembly: 4, dxf: null }
+  );
+  const { buffer, lineCount } = await buildCuttingListWorkbook(input);
+  const ws = await load(buffer);
+  assert.equal(lineCount, 4);
+  const missingRow = findRow(ws, "95 3/4");
+  assert.ok(missingRow > 0, "BOM description should appear in the cutting list");
+  assert.equal(ws.getCell(missingRow, 10).value, 4);
+  assert.equal(ws.getCell(missingRow, 2).font.color.argb, "FF9C0006");
+  assert.equal(ws.getCell(missingRow, 2).fill.fgColor.argb, "FFFFE2E2");
+  assert.equal(findRow(ws, "Tek Screw"), 0);
+});
+
+test("inserted rows retain the standard data-row style after large section expansion", async () => {
+  const input = payload(190);
+  const { buffer } = await buildCuttingListWorkbook(input);
+  const ws = await load(buffer);
+  const last16 = findRow(ws, "T01A-189 TROUGH");
+  assert.ok(last16 > 208);
+  assert.equal(JSON.stringify(ws.getRow(last16).getCell(1).style), JSON.stringify(ws.getRow(104).getCell(1).style));
+});
