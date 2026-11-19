@@ -110,9 +110,39 @@ function normalizePartTokens(value, fixtureTag) {
     .filter(Boolean);
 }
 
+function isFixtureOnlyPartNumber(partNumber, fixtureTag) {
+  const part = String(partNumber || "").trim().toUpperCase();
+  const fixture = String(fixtureTag || "").trim().toUpperCase();
+  return Boolean(fixture && part === fixture);
+}
+
+function isFabricatedDxfLabel(componentLabel) {
+  return /\\b(?:TROUGH|CHANNEL|CHN|ANGLE|ANG|PLATE|PLT|END[\\s_-]*CAP|ENDCAP|SPLICE|GUSSET|GUS)\\b/i.test(
+    String(componentLabel || "")
+  );
+}
+
 function matchDxfIndex(partNumber, files, fixtureTag) {
   const target = normalizePart(partNumber, fixtureTag);
   const targetTokens = normalizePartTokens(partNumber, fixtureTag);
+
+  // Some SolidWorks BOMs use the fixture tag itself as the fabricated part
+  // number (for example T06). In that case the normalizer intentionally strips
+  // the fixture tag and leaves no identity to compare. Auto-match only when
+  // there is exactly one fabricated DXF for that same fixture; if there are
+  // multiple candidates, leave the component unmatched rather than guessing.
+  if (isFixtureOnlyPartNumber(partNumber, fixtureTag)) {
+    const candidates = files
+      .map((file, index) => ({ file, index }))
+      .filter(({ file }) =>
+        String(file.fixtureTag || "").trim().toUpperCase() === String(fixtureTag || "").trim().toUpperCase() &&
+        isFabricatedDxfLabel(file.componentLabel)
+      );
+
+    if (candidates.length === 1) return candidates[0].index;
+    return "";
+  }
+
   if (!target || !targetTokens.length) return "";
 
   let bestIndex = -1;
