@@ -117,7 +117,7 @@ function isFixtureOnlyPartNumber(partNumber, fixtureTag) {
 }
 
 function isFabricatedDxfLabel(componentLabel) {
-  return /\\b(?:TROUGH|CHANNEL|CHN|ANGLE|ANG|PLATE|PLT|END[\\s_-]*CAP|ENDCAP|SPLICE|GUSSET|GUS)\\b/i.test(
+  return /\b(?:TROUGH|CHANNEL|CHN|ANGLE|ANG|PLATE|PLT|END[\s_-]*CAP|ENDCAP|SPLICE|GUSSET|GUS)\b/i.test(
     String(componentLabel || "")
   );
 }
